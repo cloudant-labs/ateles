@@ -6,6 +6,7 @@ service Ateles {
   rpc CreateContext(CreateContextRequest) returns (CreateContextResponse) {}
   rpc AddMapFuns(AddMapFunsRequest) returns (AddMapFunsResponse) {}
   rpc MapDocs(stream MapDocsRequest) returns (stream MapDocsResponse) {}
+  rpc Reset(ResetRequest) returns (ResetResponse) {}
 }
 
 
@@ -42,4 +43,14 @@ message MapDocsResponse {
     bool ok = 1;
     string map_id = 2;
     string result = 3;
+}
+
+
+message ResetRequest {
+
+}
+
+
+message ResetResponse {
+
 }

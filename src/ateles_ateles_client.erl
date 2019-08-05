@@ -3,7 +3,7 @@
 %% @end
 %%%-------------------------------------------------------------------
 
-%% this module was generated on 2019-08-01T14:53:10+00:00 and should not be modified manually
+%% this module was generated on 2019-08-05T12:04:07+00:00 and should not be modified manually
 
 -module(ateles_ateles_client).
 
@@ -76,4 +76,22 @@ map_docs(Options) ->
     {ok, grpcbox_client:stream()} | grpcbox_stream:grpc_error_response().
 map_docs(Ctx, Options) ->
     grpcbox_client:stream(Ctx, <<"/ateles.Ateles/MapDocs">>, ?DEF(map_docs_request, map_docs_response, <<"ateles.MapDocsRequest">>), Options).
+
+%% @doc Unary RPC
+-spec reset(ateles_pb:reset_request()) ->
+    {ok, ateles_pb:reset_response(), grpcbox:metadata()} | grpcbox_stream:grpc_error_response().
+reset(Input) ->
+    reset(ctx:new(), Input, #{}).
+
+-spec reset(ctx:t() | ateles_pb:reset_request(), ateles_pb:reset_request() | grpcbox_client:options()) ->
+    {ok, ateles_pb:reset_response(), grpcbox:metadata()} | grpcbox_stream:grpc_error_response().
+reset(Ctx, Input) when ?is_ctx(Ctx) ->
+    reset(Ctx, Input, #{});
+reset(Input, Options) ->
+    reset(ctx:new(), Input, Options).
+
+-spec reset(ctx:t(), ateles_pb:reset_request(), grpcbox_client:options()) ->
+    {ok, ateles_pb:reset_response(), grpcbox:metadata()} | grpcbox_stream:grpc_error_response().
+reset(Ctx, Input, Options) ->
+    grpcbox_client:unary(Ctx, <<"/ateles.Ateles/Reset">>, Input, ?DEF(reset_request, reset_response, <<"ateles.ResetRequest">>), Options).
 

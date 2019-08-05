@@ -80,13 +80,21 @@
         result                  => iodata()         % = 3
        }.
 
--export_type(['create_context_request'/0, 'create_context_response'/0, 'add_map_funs_request'/0, 'add_map_funs_response'/0, 'map_docs_request'/0, 'map_docs_response'/0]).
+-type reset_request() ::
+      #{
+       }.
 
--spec encode_msg(create_context_request() | create_context_response() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response(), atom()) -> binary().
+-type reset_response() ::
+      #{
+       }.
+
+-export_type(['create_context_request'/0, 'create_context_response'/0, 'add_map_funs_request'/0, 'add_map_funs_response'/0, 'map_docs_request'/0, 'map_docs_response'/0, 'reset_request'/0, 'reset_response'/0]).
+
+-spec encode_msg(create_context_request() | create_context_response() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response() | reset_request() | reset_response(), atom()) -> binary().
 encode_msg(Msg, MsgName) when is_atom(MsgName) ->
     encode_msg(Msg, MsgName, []).
 
--spec encode_msg(create_context_request() | create_context_response() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response(), atom(), list()) -> binary().
+-spec encode_msg(create_context_request() | create_context_response() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response() | reset_request() | reset_response(), atom(), list()) -> binary().
 encode_msg(Msg, MsgName, Opts) ->
     case proplists:get_bool(verify, Opts) of
       true -> verify_msg(Msg, MsgName, Opts);
@@ -111,7 +119,13 @@ encode_msg(Msg, MsgName, Opts) ->
 				      TrUserData);
       map_docs_response ->
 	  encode_msg_map_docs_response(id(Msg, TrUserData),
-				       TrUserData)
+				       TrUserData);
+      reset_request ->
+	  encode_msg_reset_request(id(Msg, TrUserData),
+				   TrUserData);
+      reset_response ->
+	  encode_msg_reset_response(id(Msg, TrUserData),
+				    TrUserData)
     end.
 
 
@@ -264,6 +278,10 @@ encode_msg_map_docs_response(#{} = M, Bin,
 	  end;
       _ -> B2
     end.
+
+encode_msg_reset_request(_Msg, _TrUserData) -> <<>>.
+
+encode_msg_reset_response(_Msg, _TrUserData) -> <<>>.
 
 e_field_add_map_funs_request_map_funs([Elem | Rest],
 				      Bin, TrUserData) ->
@@ -430,6 +448,12 @@ decode_msg_2_doit(map_docs_request, Bin, TrUserData) ->
        TrUserData);
 decode_msg_2_doit(map_docs_response, Bin, TrUserData) ->
     id(decode_msg_map_docs_response(Bin, TrUserData),
+       TrUserData);
+decode_msg_2_doit(reset_request, Bin, TrUserData) ->
+    id(decode_msg_reset_request(Bin, TrUserData),
+       TrUserData);
+decode_msg_2_doit(reset_response, Bin, TrUserData) ->
+    id(decode_msg_reset_response(Bin, TrUserData),
        TrUserData).
 
 
@@ -1210,6 +1234,145 @@ skip_64_map_docs_response(<<_:64, Rest/binary>>, Z1, Z2,
     dfp_read_field_def_map_docs_response(Rest, Z1, Z2, F@_1,
 					 F@_2, F@_3, TrUserData).
 
+decode_msg_reset_request(Bin, TrUserData) ->
+    dfp_read_field_def_reset_request(Bin, 0, 0, TrUserData).
+
+dfp_read_field_def_reset_request(<<>>, 0, 0, _) -> #{};
+dfp_read_field_def_reset_request(Other, Z1, Z2,
+				 TrUserData) ->
+    dg_read_field_def_reset_request(Other, Z1, Z2,
+				    TrUserData).
+
+dg_read_field_def_reset_request(<<1:1, X:7,
+				  Rest/binary>>,
+				N, Acc, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_reset_request(Rest, N + 7,
+				    X bsl N + Acc, TrUserData);
+dg_read_field_def_reset_request(<<0:1, X:7,
+				  Rest/binary>>,
+				N, Acc, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key band 7 of
+      0 -> skip_varint_reset_request(Rest, 0, 0, TrUserData);
+      1 -> skip_64_reset_request(Rest, 0, 0, TrUserData);
+      2 ->
+	  skip_length_delimited_reset_request(Rest, 0, 0,
+					      TrUserData);
+      3 ->
+	  skip_group_reset_request(Rest, Key bsr 3, 0,
+				   TrUserData);
+      5 -> skip_32_reset_request(Rest, 0, 0, TrUserData)
+    end;
+dg_read_field_def_reset_request(<<>>, 0, 0, _) -> #{}.
+
+skip_varint_reset_request(<<1:1, _:7, Rest/binary>>, Z1,
+			  Z2, TrUserData) ->
+    skip_varint_reset_request(Rest, Z1, Z2, TrUserData);
+skip_varint_reset_request(<<0:1, _:7, Rest/binary>>, Z1,
+			  Z2, TrUserData) ->
+    dfp_read_field_def_reset_request(Rest, Z1, Z2,
+				     TrUserData).
+
+skip_length_delimited_reset_request(<<1:1, X:7,
+				      Rest/binary>>,
+				    N, Acc, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_reset_request(Rest, N + 7,
+					X bsl N + Acc, TrUserData);
+skip_length_delimited_reset_request(<<0:1, X:7,
+				      Rest/binary>>,
+				    N, Acc, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_reset_request(Rest2, 0, 0,
+				     TrUserData).
+
+skip_group_reset_request(Bin, FNum, Z2, TrUserData) ->
+    {_, Rest} = read_group(Bin, FNum),
+    dfp_read_field_def_reset_request(Rest, 0, Z2,
+				     TrUserData).
+
+skip_32_reset_request(<<_:32, Rest/binary>>, Z1, Z2,
+		      TrUserData) ->
+    dfp_read_field_def_reset_request(Rest, Z1, Z2,
+				     TrUserData).
+
+skip_64_reset_request(<<_:64, Rest/binary>>, Z1, Z2,
+		      TrUserData) ->
+    dfp_read_field_def_reset_request(Rest, Z1, Z2,
+				     TrUserData).
+
+decode_msg_reset_response(Bin, TrUserData) ->
+    dfp_read_field_def_reset_response(Bin, 0, 0,
+				      TrUserData).
+
+dfp_read_field_def_reset_response(<<>>, 0, 0, _) -> #{};
+dfp_read_field_def_reset_response(Other, Z1, Z2,
+				  TrUserData) ->
+    dg_read_field_def_reset_response(Other, Z1, Z2,
+				     TrUserData).
+
+dg_read_field_def_reset_response(<<1:1, X:7,
+				   Rest/binary>>,
+				 N, Acc, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_reset_response(Rest, N + 7,
+				     X bsl N + Acc, TrUserData);
+dg_read_field_def_reset_response(<<0:1, X:7,
+				   Rest/binary>>,
+				 N, Acc, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key band 7 of
+      0 -> skip_varint_reset_response(Rest, 0, 0, TrUserData);
+      1 -> skip_64_reset_response(Rest, 0, 0, TrUserData);
+      2 ->
+	  skip_length_delimited_reset_response(Rest, 0, 0,
+					       TrUserData);
+      3 ->
+	  skip_group_reset_response(Rest, Key bsr 3, 0,
+				    TrUserData);
+      5 -> skip_32_reset_response(Rest, 0, 0, TrUserData)
+    end;
+dg_read_field_def_reset_response(<<>>, 0, 0, _) -> #{}.
+
+skip_varint_reset_response(<<1:1, _:7, Rest/binary>>,
+			   Z1, Z2, TrUserData) ->
+    skip_varint_reset_response(Rest, Z1, Z2, TrUserData);
+skip_varint_reset_response(<<0:1, _:7, Rest/binary>>,
+			   Z1, Z2, TrUserData) ->
+    dfp_read_field_def_reset_response(Rest, Z1, Z2,
+				      TrUserData).
+
+skip_length_delimited_reset_response(<<1:1, X:7,
+				       Rest/binary>>,
+				     N, Acc, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_reset_response(Rest, N + 7,
+					 X bsl N + Acc, TrUserData);
+skip_length_delimited_reset_response(<<0:1, X:7,
+				       Rest/binary>>,
+				     N, Acc, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_reset_response(Rest2, 0, 0,
+				      TrUserData).
+
+skip_group_reset_response(Bin, FNum, Z2, TrUserData) ->
+    {_, Rest} = read_group(Bin, FNum),
+    dfp_read_field_def_reset_response(Rest, 0, Z2,
+				      TrUserData).
+
+skip_32_reset_response(<<_:32, Rest/binary>>, Z1, Z2,
+		       TrUserData) ->
+    dfp_read_field_def_reset_response(Rest, Z1, Z2,
+				      TrUserData).
+
+skip_64_reset_response(<<_:64, Rest/binary>>, Z1, Z2,
+		       TrUserData) ->
+    dfp_read_field_def_reset_response(Rest, Z1, Z2,
+				      TrUserData).
+
 read_group(Bin, FieldNum) ->
     {NumBytes, EndTagLen} = read_gr_b(Bin, 0, 0, 0, 0, FieldNum),
     <<Group:NumBytes/binary, _:EndTagLen/binary, Rest/binary>> = Bin,
@@ -1286,7 +1449,11 @@ merge_msgs(Prev, New, MsgName, Opts) ->
       map_docs_request ->
 	  merge_msg_map_docs_request(Prev, New, TrUserData);
       map_docs_response ->
-	  merge_msg_map_docs_response(Prev, New, TrUserData)
+	  merge_msg_map_docs_response(Prev, New, TrUserData);
+      reset_request ->
+	  merge_msg_reset_request(Prev, New, TrUserData);
+      reset_response ->
+	  merge_msg_reset_response(Prev, New, TrUserData)
     end.
 
 -compile({nowarn_unused_function,merge_msg_create_context_request/3}).
@@ -1378,6 +1545,13 @@ merge_msg_map_docs_response(PMsg, NMsg, _) ->
       _ -> S3
     end.
 
+-compile({nowarn_unused_function,merge_msg_reset_request/3}).
+merge_msg_reset_request(_Prev, New, _TrUserData) -> New.
+
+-compile({nowarn_unused_function,merge_msg_reset_response/3}).
+merge_msg_reset_response(_Prev, New, _TrUserData) ->
+    New.
+
 
 verify_msg(Msg, MsgName) when is_atom(MsgName) ->
     verify_msg(Msg, MsgName, []).
@@ -1399,6 +1573,10 @@ verify_msg(Msg, MsgName, Opts) ->
 	  v_msg_map_docs_request(Msg, [MsgName], TrUserData);
       map_docs_response ->
 	  v_msg_map_docs_response(Msg, [MsgName], TrUserData);
+      reset_request ->
+	  v_msg_reset_request(Msg, [MsgName], TrUserData);
+      reset_response ->
+	  v_msg_reset_response(Msg, [MsgName], TrUserData);
       _ -> mk_type_error(not_a_known_message, Msg, [])
     end.
 
@@ -1572,6 +1750,38 @@ v_msg_map_docs_response(X, Path, _TrUserData) ->
     mk_type_error({expected_msg, map_docs_response}, X,
 		  Path).
 
+-compile({nowarn_unused_function,v_msg_reset_request/3}).
+-dialyzer({nowarn_function,v_msg_reset_request/3}).
+v_msg_reset_request(#{} = M, Path, _) ->
+    lists:foreach(fun (OtherKey) ->
+			  mk_type_error({extraneous_key, OtherKey}, M, Path)
+		  end,
+		  maps:keys(M)),
+    ok;
+v_msg_reset_request(M, Path, _TrUserData)
+    when is_map(M) ->
+    mk_type_error({missing_fields, [] -- maps:keys(M),
+		   reset_request},
+		  M, Path);
+v_msg_reset_request(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, reset_request}, X, Path).
+
+-compile({nowarn_unused_function,v_msg_reset_response/3}).
+-dialyzer({nowarn_function,v_msg_reset_response/3}).
+v_msg_reset_response(#{} = M, Path, _) ->
+    lists:foreach(fun (OtherKey) ->
+			  mk_type_error({extraneous_key, OtherKey}, M, Path)
+		  end,
+		  maps:keys(M)),
+    ok;
+v_msg_reset_response(M, Path, _TrUserData)
+    when is_map(M) ->
+    mk_type_error({missing_fields, [] -- maps:keys(M),
+		   reset_response},
+		  M, Path);
+v_msg_reset_response(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, reset_response}, X, Path).
+
 -compile({nowarn_unused_function,v_type_bool/3}).
 -dialyzer({nowarn_function,v_type_bool/3}).
 v_type_bool(false, _Path, _TrUserData) -> ok;
@@ -1662,13 +1872,16 @@ get_msg_defs() ->
        #{name => map_id, fnum => 2, rnum => 3, type => string,
 	 occurrence => optional, opts => []},
        #{name => result, fnum => 3, rnum => 4, type => string,
-	 occurrence => optional, opts => []}]}].
+	 occurrence => optional, opts => []}]},
+     {{msg, reset_request}, []},
+     {{msg, reset_response}, []}].
 
 
 get_msg_names() ->
     [create_context_request, create_context_response,
      add_map_funs_request, add_map_funs_response,
-     map_docs_request, map_docs_response].
+     map_docs_request, map_docs_response, reset_request,
+     reset_response].
 
 
 get_group_names() -> [].
@@ -1677,7 +1890,8 @@ get_group_names() -> [].
 get_msg_or_group_names() ->
     [create_context_request, create_context_response,
      add_map_funs_request, add_map_funs_response,
-     map_docs_request, map_docs_response].
+     map_docs_request, map_docs_response, reset_request,
+     reset_response].
 
 
 get_enum_names() -> [].
@@ -1721,6 +1935,8 @@ find_msg_def(map_docs_response) ->
        occurrence => optional, opts => []},
      #{name => result, fnum => 3, rnum => 4, type => string,
        occurrence => optional, opts => []}];
+find_msg_def(reset_request) -> [];
+find_msg_def(reset_response) -> [];
 find_msg_def(_) -> error.
 
 
@@ -1753,12 +1969,15 @@ get_service_def('ateles.Ateles') ->
 	output_stream => false, opts => []},
       #{name => 'MapDocs', input => map_docs_request,
 	output => map_docs_response, input_stream => true,
-	output_stream => true, opts => []}]};
+	output_stream => true, opts => []},
+      #{name => 'Reset', input => reset_request,
+	output => reset_response, input_stream => false,
+	output_stream => false, opts => []}]};
 get_service_def(_) -> error.
 
 
 get_rpc_names('ateles.Ateles') ->
-    ['CreateContext', 'AddMapFuns', 'MapDocs'];
+    ['CreateContext', 'AddMapFuns', 'MapDocs', 'Reset'];
 get_rpc_names(_) -> error.
 
 
@@ -1781,6 +2000,10 @@ find_rpc_def(_, _) -> error.
     #{name => 'MapDocs', input => map_docs_request,
       output => map_docs_response, input_stream => true,
       output_stream => true, opts => []};
+'find_rpc_def_ateles.Ateles'('Reset') ->
+    #{name => 'Reset', input => reset_request,
+      output => reset_response, input_stream => false,
+      output_stream => false, opts => []};
 'find_rpc_def_ateles.Ateles'(_) -> error.
 
 
@@ -1815,6 +2038,8 @@ fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"AddMapFuns">>) ->
     {'ateles.Ateles', 'AddMapFuns'};
 fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"MapDocs">>) ->
     {'ateles.Ateles', 'MapDocs'};
+fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"Reset">>) ->
+    {'ateles.Ateles', 'Reset'};
 fqbins_to_service_and_rpc_name(S, R) ->
     error({gpb_error, {badservice_or_rpc, {S, R}}}).
 
@@ -1831,6 +2056,9 @@ service_and_rpc_name_to_fqbins('ateles.Ateles',
 service_and_rpc_name_to_fqbins('ateles.Ateles',
 			       'MapDocs') ->
     {<<"ateles.Ateles">>, <<"MapDocs">>};
+service_and_rpc_name_to_fqbins('ateles.Ateles',
+			       'Reset') ->
+    {<<"ateles.Ateles">>, <<"Reset">>};
 service_and_rpc_name_to_fqbins(S, R) ->
     error({gpb_error, {badservice_or_rpc, {S, R}}}).
 
@@ -1841,6 +2069,8 @@ fqbin_to_msg_name(<<"ateles.AddMapFunsRequest">>) -> add_map_funs_request;
 fqbin_to_msg_name(<<"ateles.AddMapFunsResponse">>) -> add_map_funs_response;
 fqbin_to_msg_name(<<"ateles.MapDocsRequest">>) -> map_docs_request;
 fqbin_to_msg_name(<<"ateles.MapDocsResponse">>) -> map_docs_response;
+fqbin_to_msg_name(<<"ateles.ResetRequest">>) -> reset_request;
+fqbin_to_msg_name(<<"ateles.ResetResponse">>) -> reset_response;
 fqbin_to_msg_name(E) -> error({gpb_error, {badmsg, E}}).
 
 
@@ -1850,6 +2080,8 @@ msg_name_to_fqbin(add_map_funs_request) -> <<"ateles.AddMapFunsRequest">>;
 msg_name_to_fqbin(add_map_funs_response) -> <<"ateles.AddMapFunsResponse">>;
 msg_name_to_fqbin(map_docs_request) -> <<"ateles.MapDocsRequest">>;
 msg_name_to_fqbin(map_docs_response) -> <<"ateles.MapDocsResponse">>;
+msg_name_to_fqbin(reset_request) -> <<"ateles.ResetRequest">>;
+msg_name_to_fqbin(reset_response) -> <<"ateles.ResetResponse">>;
 msg_name_to_fqbin(E) -> error({gpb_error, {badmsg, E}}).
 
 
@@ -1893,7 +2125,8 @@ get_all_proto_names() -> ["ateles"].
 get_msg_containment("ateles") ->
     [add_map_funs_request, add_map_funs_response,
      create_context_request, create_context_response,
-     map_docs_request, map_docs_response];
+     map_docs_request, map_docs_response, reset_request,
+     reset_response];
 get_msg_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
@@ -1911,7 +2144,8 @@ get_service_containment(P) ->
 get_rpc_containment("ateles") ->
     [{'ateles.Ateles', 'CreateContext'},
      {'ateles.Ateles', 'AddMapFuns'},
-     {'ateles.Ateles', 'MapDocs'}];
+     {'ateles.Ateles', 'MapDocs'},
+     {'ateles.Ateles', 'Reset'}];
 get_rpc_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
@@ -1921,9 +2155,11 @@ get_enum_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
 
+get_proto_by_msg_name_as_fqbin(<<"ateles.ResetRequest">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(<<"ateles.MapDocsRequest">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(<<"ateles.CreateContextRequest">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(<<"ateles.AddMapFunsRequest">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"ateles.ResetResponse">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(<<"ateles.MapDocsResponse">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(<<"ateles.CreateContextResponse">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(<<"ateles.AddMapFunsResponse">>) -> "ateles";

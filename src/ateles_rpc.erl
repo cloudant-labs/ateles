@@ -16,7 +16,9 @@
 
 -export([
     init/0,
-    create_context/1
+    create_context/1,
+    add_map_funs/1,
+    map_docs/0
 ]).
 
 
@@ -41,8 +43,17 @@ init() ->
     ok.
 
 
-create_context(Options) ->
-    ateles_ateles_client:create_context(Options, grpc_opts()).
+-spec create_context(any()) -> {ok, map(), map()} | {error, any()}.
+create_context(CtxOpts) ->
+    ateles_ateles_client:create_context(CtxOpts, grpc_opts()).
+
+
+add_map_funs(MapFunOpts) ->
+    ateles_ateles_client:add_map_funs(MapFunOpts, grpc_opts()).
+
+
+map_docs() ->
+    ateles_ateles_client:map_docs(grpc_opts()).
 
 
 grpc_opts() ->
