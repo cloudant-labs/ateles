@@ -1,0 +1,45 @@
+syntax = "proto3";
+
+package ateles;
+
+service Ateles {
+  rpc CreateContext(CreateContextRequest) returns (CreateContextResponse) {}
+  rpc AddMapFuns(AddMapFunsRequest) returns (AddMapFunsResponse) {}
+  rpc MapDocs(stream MapDocsRequest) returns (stream MapDocsResponse) {}
+}
+
+
+message CreateContextRequest {
+    string context_id = 1;
+}
+
+
+message CreateContextResponse {
+
+}
+
+
+message AddMapFunsRequest {
+    string context_id = 1;
+    string lib = 2;
+    repeated string map_funs = 3;
+}
+
+
+message AddMapFunsResponse {
+
+}
+
+
+message MapDocsRequest {
+    string context_id = 1;
+    string map_id = 2;
+    string doc = 3;
+}
+
+
+message MapDocsResponse {
+    bool ok = 1;
+    string map_id = 2;
+    string result = 3;
+}
