@@ -1,6 +1,5 @@
 syntax = "proto3";
 
-package ateles;
 
 service Ateles {
   rpc CreateContext(CreateContextRequest) returns (CreateContextResponse) {}
@@ -19,11 +18,15 @@ message CreateContextResponse {
 
 }
 
+message MapFun {
+    string id = 1;
+    string fun = 2;
+}
 
 message AddMapFunsRequest {
     string context_id = 1;
     string lib = 2;
-    repeated string map_funs = 3;
+    repeated MapFun map_funs = 3;
 }
 
 

@@ -1,4 +1,4 @@
-.PHONY: generate_proto
+.PHONY: generate_proto, run
 
 
 all: compile
@@ -10,7 +10,6 @@ compile:
 
 run:
 	rebar3 shell --apps ateles --config ./config/sys.config
-	# rebar3 shell --apps ateles
 
 
 generate_proto:

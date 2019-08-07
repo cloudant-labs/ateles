@@ -58,10 +58,15 @@
       #{
        }.
 
+-type map_fun() ::
+      #{id                      => iodata(),        % = 1
+        'fun'                   => iodata()         % = 2
+       }.
+
 -type add_map_funs_request() ::
       #{context_id              => iodata(),        % = 1
         lib                     => iodata(),        % = 2
-        map_funs                => [iodata()]       % = 3
+        map_funs                => [map_fun()]      % = 3
        }.
 
 -type add_map_funs_response() ::
@@ -88,13 +93,13 @@
       #{
        }.
 
--export_type(['create_context_request'/0, 'create_context_response'/0, 'add_map_funs_request'/0, 'add_map_funs_response'/0, 'map_docs_request'/0, 'map_docs_response'/0, 'reset_request'/0, 'reset_response'/0]).
+-export_type(['create_context_request'/0, 'create_context_response'/0, 'map_fun'/0, 'add_map_funs_request'/0, 'add_map_funs_response'/0, 'map_docs_request'/0, 'map_docs_response'/0, 'reset_request'/0, 'reset_response'/0]).
 
--spec encode_msg(create_context_request() | create_context_response() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response() | reset_request() | reset_response(), atom()) -> binary().
+-spec encode_msg(create_context_request() | create_context_response() | map_fun() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response() | reset_request() | reset_response(), atom()) -> binary().
 encode_msg(Msg, MsgName) when is_atom(MsgName) ->
     encode_msg(Msg, MsgName, []).
 
--spec encode_msg(create_context_request() | create_context_response() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response() | reset_request() | reset_response(), atom(), list()) -> binary().
+-spec encode_msg(create_context_request() | create_context_response() | map_fun() | add_map_funs_request() | add_map_funs_response() | map_docs_request() | map_docs_response() | reset_request() | reset_response(), atom(), list()) -> binary().
 encode_msg(Msg, MsgName, Opts) ->
     case proplists:get_bool(verify, Opts) of
       true -> verify_msg(Msg, MsgName, Opts);
@@ -108,6 +113,8 @@ encode_msg(Msg, MsgName, Opts) ->
       create_context_response ->
 	  encode_msg_create_context_response(id(Msg, TrUserData),
 					     TrUserData);
+      map_fun ->
+	  encode_msg_map_fun(id(Msg, TrUserData), TrUserData);
       add_map_funs_request ->
 	  encode_msg_add_map_funs_request(id(Msg, TrUserData),
 					  TrUserData);
@@ -151,6 +158,36 @@ encode_msg_create_context_request(#{} = M, Bin,
 
 encode_msg_create_context_response(_Msg, _TrUserData) ->
     <<>>.
+
+encode_msg_map_fun(Msg, TrUserData) ->
+    encode_msg_map_fun(Msg, <<>>, TrUserData).
+
+
+encode_msg_map_fun(#{} = M, Bin, TrUserData) ->
+    B1 = case M of
+	   #{id := F1} ->
+	       begin
+		 TrF1 = id(F1, TrUserData),
+		 case is_empty_string(TrF1) of
+		   true -> Bin;
+		   false ->
+		       e_type_string(TrF1, <<Bin/binary, 10>>, TrUserData)
+		 end
+	       end;
+	   _ -> Bin
+	 end,
+    case M of
+      #{'fun' := F2} ->
+	  begin
+	    TrF2 = id(F2, TrUserData),
+	    case is_empty_string(TrF2) of
+	      true -> B1;
+	      false ->
+		  e_type_string(TrF2, <<B1/binary, 18>>, TrUserData)
+	    end
+	  end;
+      _ -> B1
+    end.
 
 encode_msg_add_map_funs_request(Msg, TrUserData) ->
     encode_msg_add_map_funs_request(Msg, <<>>, TrUserData).
@@ -283,11 +320,18 @@ encode_msg_reset_request(_Msg, _TrUserData) -> <<>>.
 
 encode_msg_reset_response(_Msg, _TrUserData) -> <<>>.
 
+e_mfield_add_map_funs_request_map_funs(Msg, Bin,
+				       TrUserData) ->
+    SubBin = encode_msg_map_fun(Msg, <<>>, TrUserData),
+    Bin2 = e_varint(byte_size(SubBin), Bin),
+    <<Bin2/binary, SubBin/binary>>.
+
 e_field_add_map_funs_request_map_funs([Elem | Rest],
 				      Bin, TrUserData) ->
     Bin2 = <<Bin/binary, 26>>,
-    Bin3 = e_type_string(id(Elem, TrUserData), Bin2,
-			 TrUserData),
+    Bin3 = e_mfield_add_map_funs_request_map_funs(id(Elem,
+						     TrUserData),
+						  Bin2, TrUserData),
     e_field_add_map_funs_request_map_funs(Rest, Bin3,
 					  TrUserData);
 e_field_add_map_funs_request_map_funs([], Bin,
@@ -435,6 +479,8 @@ decode_msg_2_doit(create_context_response, Bin,
 		  TrUserData) ->
     id(decode_msg_create_context_response(Bin, TrUserData),
        TrUserData);
+decode_msg_2_doit(map_fun, Bin, TrUserData) ->
+    id(decode_msg_map_fun(Bin, TrUserData), TrUserData);
 decode_msg_2_doit(add_map_funs_request, Bin,
 		  TrUserData) ->
     id(decode_msg_add_map_funs_request(Bin, TrUserData),
@@ -654,6 +700,124 @@ skip_64_create_context_response(<<_:64, Rest/binary>>,
     dfp_read_field_def_create_context_response(Rest, Z1, Z2,
 					       TrUserData).
 
+decode_msg_map_fun(Bin, TrUserData) ->
+    dfp_read_field_def_map_fun(Bin, 0, 0,
+			       id(<<>>, TrUserData), id(<<>>, TrUserData),
+			       TrUserData).
+
+dfp_read_field_def_map_fun(<<10, Rest/binary>>, Z1, Z2,
+			   F@_1, F@_2, TrUserData) ->
+    d_field_map_fun_id(Rest, Z1, Z2, F@_1, F@_2,
+		       TrUserData);
+dfp_read_field_def_map_fun(<<18, Rest/binary>>, Z1, Z2,
+			   F@_1, F@_2, TrUserData) ->
+    d_field_map_fun_fun(Rest, Z1, Z2, F@_1, F@_2,
+			TrUserData);
+dfp_read_field_def_map_fun(<<>>, 0, 0, F@_1, F@_2, _) ->
+    #{id => F@_1, 'fun' => F@_2};
+dfp_read_field_def_map_fun(Other, Z1, Z2, F@_1, F@_2,
+			   TrUserData) ->
+    dg_read_field_def_map_fun(Other, Z1, Z2, F@_1, F@_2,
+			      TrUserData).
+
+dg_read_field_def_map_fun(<<1:1, X:7, Rest/binary>>, N,
+			  Acc, F@_1, F@_2, TrUserData)
+    when N < 32 - 7 ->
+    dg_read_field_def_map_fun(Rest, N + 7, X bsl N + Acc,
+			      F@_1, F@_2, TrUserData);
+dg_read_field_def_map_fun(<<0:1, X:7, Rest/binary>>, N,
+			  Acc, F@_1, F@_2, TrUserData) ->
+    Key = X bsl N + Acc,
+    case Key of
+      10 ->
+	  d_field_map_fun_id(Rest, 0, 0, F@_1, F@_2, TrUserData);
+      18 ->
+	  d_field_map_fun_fun(Rest, 0, 0, F@_1, F@_2, TrUserData);
+      _ ->
+	  case Key band 7 of
+	    0 ->
+		skip_varint_map_fun(Rest, 0, 0, F@_1, F@_2, TrUserData);
+	    1 ->
+		skip_64_map_fun(Rest, 0, 0, F@_1, F@_2, TrUserData);
+	    2 ->
+		skip_length_delimited_map_fun(Rest, 0, 0, F@_1, F@_2,
+					      TrUserData);
+	    3 ->
+		skip_group_map_fun(Rest, Key bsr 3, 0, F@_1, F@_2,
+				   TrUserData);
+	    5 -> skip_32_map_fun(Rest, 0, 0, F@_1, F@_2, TrUserData)
+	  end
+    end;
+dg_read_field_def_map_fun(<<>>, 0, 0, F@_1, F@_2, _) ->
+    #{id => F@_1, 'fun' => F@_2}.
+
+d_field_map_fun_id(<<1:1, X:7, Rest/binary>>, N, Acc,
+		   F@_1, F@_2, TrUserData)
+    when N < 57 ->
+    d_field_map_fun_id(Rest, N + 7, X bsl N + Acc, F@_1,
+		       F@_2, TrUserData);
+d_field_map_fun_id(<<0:1, X:7, Rest/binary>>, N, Acc, _,
+		   F@_2, TrUserData) ->
+    {NewFValue, RestF} = begin
+			   Len = X bsl N + Acc,
+			   <<Bytes:Len/binary, Rest2/binary>> = Rest,
+			   {id(binary:copy(Bytes), TrUserData), Rest2}
+			 end,
+    dfp_read_field_def_map_fun(RestF, 0, 0, NewFValue, F@_2,
+			       TrUserData).
+
+d_field_map_fun_fun(<<1:1, X:7, Rest/binary>>, N, Acc,
+		    F@_1, F@_2, TrUserData)
+    when N < 57 ->
+    d_field_map_fun_fun(Rest, N + 7, X bsl N + Acc, F@_1,
+			F@_2, TrUserData);
+d_field_map_fun_fun(<<0:1, X:7, Rest/binary>>, N, Acc,
+		    F@_1, _, TrUserData) ->
+    {NewFValue, RestF} = begin
+			   Len = X bsl N + Acc,
+			   <<Bytes:Len/binary, Rest2/binary>> = Rest,
+			   {id(binary:copy(Bytes), TrUserData), Rest2}
+			 end,
+    dfp_read_field_def_map_fun(RestF, 0, 0, F@_1, NewFValue,
+			       TrUserData).
+
+skip_varint_map_fun(<<1:1, _:7, Rest/binary>>, Z1, Z2,
+		    F@_1, F@_2, TrUserData) ->
+    skip_varint_map_fun(Rest, Z1, Z2, F@_1, F@_2,
+			TrUserData);
+skip_varint_map_fun(<<0:1, _:7, Rest/binary>>, Z1, Z2,
+		    F@_1, F@_2, TrUserData) ->
+    dfp_read_field_def_map_fun(Rest, Z1, Z2, F@_1, F@_2,
+			       TrUserData).
+
+skip_length_delimited_map_fun(<<1:1, X:7, Rest/binary>>,
+			      N, Acc, F@_1, F@_2, TrUserData)
+    when N < 57 ->
+    skip_length_delimited_map_fun(Rest, N + 7,
+				  X bsl N + Acc, F@_1, F@_2, TrUserData);
+skip_length_delimited_map_fun(<<0:1, X:7, Rest/binary>>,
+			      N, Acc, F@_1, F@_2, TrUserData) ->
+    Length = X bsl N + Acc,
+    <<_:Length/binary, Rest2/binary>> = Rest,
+    dfp_read_field_def_map_fun(Rest2, 0, 0, F@_1, F@_2,
+			       TrUserData).
+
+skip_group_map_fun(Bin, FNum, Z2, F@_1, F@_2,
+		   TrUserData) ->
+    {_, Rest} = read_group(Bin, FNum),
+    dfp_read_field_def_map_fun(Rest, 0, Z2, F@_1, F@_2,
+			       TrUserData).
+
+skip_32_map_fun(<<_:32, Rest/binary>>, Z1, Z2, F@_1,
+		F@_2, TrUserData) ->
+    dfp_read_field_def_map_fun(Rest, Z1, Z2, F@_1, F@_2,
+			       TrUserData).
+
+skip_64_map_fun(<<_:64, Rest/binary>>, Z1, Z2, F@_1,
+		F@_2, TrUserData) ->
+    dfp_read_field_def_map_fun(Rest, Z1, Z2, F@_1, F@_2,
+			       TrUserData).
+
 decode_msg_add_map_funs_request(Bin, TrUserData) ->
     dfp_read_field_def_add_map_funs_request(Bin, 0, 0,
 					    id(<<>>, TrUserData),
@@ -677,8 +841,10 @@ dfp_read_field_def_add_map_funs_request(<<26,
 					  F@_1, F@_2, F@_3, TrUserData);
 dfp_read_field_def_add_map_funs_request(<<>>, 0, 0,
 					F@_1, F@_2, R1, TrUserData) ->
-    #{context_id => F@_1, lib => F@_2,
-      map_funs => lists_reverse(R1, TrUserData)};
+    S1 = #{context_id => F@_1, lib => F@_2},
+    if R1 == '$undef' -> S1;
+       true -> S1#{map_funs => lists_reverse(R1, TrUserData)}
+    end;
 dfp_read_field_def_add_map_funs_request(Other, Z1, Z2,
 					F@_1, F@_2, F@_3, TrUserData) ->
     dg_read_field_def_add_map_funs_request(Other, Z1, Z2,
@@ -727,8 +893,10 @@ dg_read_field_def_add_map_funs_request(<<0:1, X:7,
     end;
 dg_read_field_def_add_map_funs_request(<<>>, 0, 0, F@_1,
 				       F@_2, R1, TrUserData) ->
-    #{context_id => F@_1, lib => F@_2,
-      map_funs => lists_reverse(R1, TrUserData)}.
+    S1 = #{context_id => F@_1, lib => F@_2},
+    if R1 == '$undef' -> S1;
+       true -> S1#{map_funs => lists_reverse(R1, TrUserData)}
+    end.
 
 d_field_add_map_funs_request_context_id(<<1:1, X:7,
 					  Rest/binary>>,
@@ -778,8 +946,9 @@ d_field_add_map_funs_request_map_funs(<<0:1, X:7,
 				      N, Acc, F@_1, F@_2, Prev, TrUserData) ->
     {NewFValue, RestF} = begin
 			   Len = X bsl N + Acc,
-			   <<Bytes:Len/binary, Rest2/binary>> = Rest,
-			   {id(binary:copy(Bytes), TrUserData), Rest2}
+			   <<Bs:Len/binary, Rest2/binary>> = Rest,
+			   {id(decode_msg_map_fun(Bs, TrUserData), TrUserData),
+			    Rest2}
 			 end,
     dfp_read_field_def_add_map_funs_request(RestF, 0, 0,
 					    F@_1, F@_2,
@@ -1442,6 +1611,7 @@ merge_msgs(Prev, New, MsgName, Opts) ->
       create_context_response ->
 	  merge_msg_create_context_response(Prev, New,
 					    TrUserData);
+      map_fun -> merge_msg_map_fun(Prev, New, TrUserData);
       add_map_funs_request ->
 	  merge_msg_add_map_funs_request(Prev, New, TrUserData);
       add_map_funs_response ->
@@ -1471,6 +1641,20 @@ merge_msg_create_context_request(PMsg, NMsg, _) ->
 merge_msg_create_context_response(_Prev, New,
 				  _TrUserData) ->
     New.
+
+-compile({nowarn_unused_function,merge_msg_map_fun/3}).
+merge_msg_map_fun(PMsg, NMsg, _) ->
+    S1 = #{},
+    S2 = case {PMsg, NMsg} of
+	   {_, #{id := NFid}} -> S1#{id => NFid};
+	   {#{id := PFid}, _} -> S1#{id => PFid};
+	   _ -> S1
+	 end,
+    case {PMsg, NMsg} of
+      {_, #{'fun' := NFfun}} -> S2#{'fun' => NFfun};
+      {#{'fun' := PFfun}, _} -> S2#{'fun' => PFfun};
+      _ -> S2
+    end.
 
 -compile({nowarn_unused_function,merge_msg_add_map_funs_request/3}).
 merge_msg_add_map_funs_request(PMsg, NMsg,
@@ -1565,6 +1749,7 @@ verify_msg(Msg, MsgName, Opts) ->
       create_context_response ->
 	  v_msg_create_context_response(Msg, [MsgName],
 					TrUserData);
+      map_fun -> v_msg_map_fun(Msg, [MsgName], TrUserData);
       add_map_funs_request ->
 	  v_msg_add_map_funs_request(Msg, [MsgName], TrUserData);
       add_map_funs_response ->
@@ -1622,6 +1807,33 @@ v_msg_create_context_response(X, Path, _TrUserData) ->
     mk_type_error({expected_msg, create_context_response},
 		  X, Path).
 
+-compile({nowarn_unused_function,v_msg_map_fun/3}).
+-dialyzer({nowarn_function,v_msg_map_fun/3}).
+v_msg_map_fun(#{} = M, Path, TrUserData) ->
+    case M of
+      #{id := F1} ->
+	  v_type_string(F1, [id | Path], TrUserData);
+      _ -> ok
+    end,
+    case M of
+      #{'fun' := F2} ->
+	  v_type_string(F2, ['fun' | Path], TrUserData);
+      _ -> ok
+    end,
+    lists:foreach(fun (id) -> ok;
+		      ('fun') -> ok;
+		      (OtherKey) ->
+			  mk_type_error({extraneous_key, OtherKey}, M, Path)
+		  end,
+		  maps:keys(M)),
+    ok;
+v_msg_map_fun(M, Path, _TrUserData) when is_map(M) ->
+    mk_type_error({missing_fields, [] -- maps:keys(M),
+		   map_fun},
+		  M, Path);
+v_msg_map_fun(X, Path, _TrUserData) ->
+    mk_type_error({expected_msg, map_fun}, X, Path).
+
 -compile({nowarn_unused_function,v_msg_add_map_funs_request/3}).
 -dialyzer({nowarn_function,v_msg_add_map_funs_request/3}).
 v_msg_add_map_funs_request(#{} = M, Path, TrUserData) ->
@@ -1638,11 +1850,11 @@ v_msg_add_map_funs_request(#{} = M, Path, TrUserData) ->
     case M of
       #{map_funs := F3} ->
 	  if is_list(F3) ->
-		 _ = [v_type_string(Elem, [map_funs | Path], TrUserData)
+		 _ = [v_msg_map_fun(Elem, [map_funs | Path], TrUserData)
 		      || Elem <- F3],
 		 ok;
 	     true ->
-		 mk_type_error({invalid_list_of, string}, F3,
+		 mk_type_error({invalid_list_of, {msg, map_fun}}, F3,
 			       [map_funs | Path])
 	  end;
       _ -> ok
@@ -1851,13 +2063,19 @@ get_msg_defs() ->
       [#{name => context_id, fnum => 1, rnum => 2,
 	 type => string, occurrence => optional, opts => []}]},
      {{msg, create_context_response}, []},
+     {{msg, map_fun},
+      [#{name => id, fnum => 1, rnum => 2, type => string,
+	 occurrence => optional, opts => []},
+       #{name => 'fun', fnum => 2, rnum => 3, type => string,
+	 occurrence => optional, opts => []}]},
      {{msg, add_map_funs_request},
       [#{name => context_id, fnum => 1, rnum => 2,
 	 type => string, occurrence => optional, opts => []},
        #{name => lib, fnum => 2, rnum => 3, type => string,
 	 occurrence => optional, opts => []},
        #{name => map_funs, fnum => 3, rnum => 4,
-	 type => string, occurrence => repeated, opts => []}]},
+	 type => {msg, map_fun}, occurrence => repeated,
+	 opts => []}]},
      {{msg, add_map_funs_response}, []},
      {{msg, map_docs_request},
       [#{name => context_id, fnum => 1, rnum => 2,
@@ -1879,7 +2097,7 @@ get_msg_defs() ->
 
 get_msg_names() ->
     [create_context_request, create_context_response,
-     add_map_funs_request, add_map_funs_response,
+     map_fun, add_map_funs_request, add_map_funs_response,
      map_docs_request, map_docs_response, reset_request,
      reset_response].
 
@@ -1889,7 +2107,7 @@ get_group_names() -> [].
 
 get_msg_or_group_names() ->
     [create_context_request, create_context_response,
-     add_map_funs_request, add_map_funs_response,
+     map_fun, add_map_funs_request, add_map_funs_response,
      map_docs_request, map_docs_response, reset_request,
      reset_response].
 
@@ -1913,13 +2131,19 @@ find_msg_def(create_context_request) ->
     [#{name => context_id, fnum => 1, rnum => 2,
        type => string, occurrence => optional, opts => []}];
 find_msg_def(create_context_response) -> [];
+find_msg_def(map_fun) ->
+    [#{name => id, fnum => 1, rnum => 2, type => string,
+       occurrence => optional, opts => []},
+     #{name => 'fun', fnum => 2, rnum => 3, type => string,
+       occurrence => optional, opts => []}];
 find_msg_def(add_map_funs_request) ->
     [#{name => context_id, fnum => 1, rnum => 2,
        type => string, occurrence => optional, opts => []},
      #{name => lib, fnum => 2, rnum => 3, type => string,
        occurrence => optional, opts => []},
      #{name => map_funs, fnum => 3, rnum => 4,
-       type => string, occurrence => repeated, opts => []}];
+       type => {msg, map_fun}, occurrence => repeated,
+       opts => []}];
 find_msg_def(add_map_funs_response) -> [];
 find_msg_def(map_docs_request) ->
     [#{name => context_id, fnum => 1, rnum => 2,
@@ -1954,11 +2178,11 @@ enum_value_by_symbol(E, V) ->
 
 
 
-get_service_names() -> ['ateles.Ateles'].
+get_service_names() -> ['Ateles'].
 
 
-get_service_def('ateles.Ateles') ->
-    {{service, 'ateles.Ateles'},
+get_service_def('Ateles') ->
+    {{service, 'Ateles'},
      [#{name => 'CreateContext',
 	input => create_context_request,
 	output => create_context_response,
@@ -1976,35 +2200,35 @@ get_service_def('ateles.Ateles') ->
 get_service_def(_) -> error.
 
 
-get_rpc_names('ateles.Ateles') ->
+get_rpc_names('Ateles') ->
     ['CreateContext', 'AddMapFuns', 'MapDocs', 'Reset'];
 get_rpc_names(_) -> error.
 
 
-find_rpc_def('ateles.Ateles', RpcName) ->
-    'find_rpc_def_ateles.Ateles'(RpcName);
+find_rpc_def('Ateles', RpcName) ->
+    find_rpc_def_Ateles(RpcName);
 find_rpc_def(_, _) -> error.
 
 
-'find_rpc_def_ateles.Ateles'('CreateContext') ->
+find_rpc_def_Ateles('CreateContext') ->
     #{name => 'CreateContext',
       input => create_context_request,
       output => create_context_response,
       input_stream => false, output_stream => false,
       opts => []};
-'find_rpc_def_ateles.Ateles'('AddMapFuns') ->
+find_rpc_def_Ateles('AddMapFuns') ->
     #{name => 'AddMapFuns', input => add_map_funs_request,
       output => add_map_funs_response, input_stream => false,
       output_stream => false, opts => []};
-'find_rpc_def_ateles.Ateles'('MapDocs') ->
+find_rpc_def_Ateles('MapDocs') ->
     #{name => 'MapDocs', input => map_docs_request,
       output => map_docs_response, input_stream => true,
       output_stream => true, opts => []};
-'find_rpc_def_ateles.Ateles'('Reset') ->
+find_rpc_def_Ateles('Reset') ->
     #{name => 'Reset', input => reset_request,
       output => reset_response, input_stream => false,
       output_stream => false, opts => []};
-'find_rpc_def_ateles.Ateles'(_) -> error.
+find_rpc_def_Ateles(_) -> error.
 
 
 fetch_rpc_def(ServiceName, RpcName) ->
@@ -2017,14 +2241,14 @@ fetch_rpc_def(ServiceName, RpcName) ->
 
 %% Convert a a fully qualified (ie with package name) service name
 %% as a binary to a service name as an atom.
-fqbin_to_service_name(<<"ateles.Ateles">>) -> 'ateles.Ateles';
+fqbin_to_service_name(<<"Ateles">>) -> 'Ateles';
 fqbin_to_service_name(X) ->
     error({gpb_error, {badservice, X}}).
 
 
 %% Convert a service name as an atom to a fully qualified
 %% (ie with package name) name as a binary.
-service_name_to_fqbin('ateles.Ateles') -> <<"ateles.Ateles">>;
+service_name_to_fqbin('Ateles') -> <<"Ateles">>;
 service_name_to_fqbin(X) ->
     error({gpb_error, {badservice, X}}).
 
@@ -2032,14 +2256,14 @@ service_name_to_fqbin(X) ->
 %% Convert a a fully qualified (ie with package name) service name
 %% and an rpc name, both as binaries to a service name and an rpc
 %% name, as atoms.
-fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"CreateContext">>) ->
-    {'ateles.Ateles', 'CreateContext'};
-fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"AddMapFuns">>) ->
-    {'ateles.Ateles', 'AddMapFuns'};
-fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"MapDocs">>) ->
-    {'ateles.Ateles', 'MapDocs'};
-fqbins_to_service_and_rpc_name(<<"ateles.Ateles">>, <<"Reset">>) ->
-    {'ateles.Ateles', 'Reset'};
+fqbins_to_service_and_rpc_name(<<"Ateles">>, <<"CreateContext">>) ->
+    {'Ateles', 'CreateContext'};
+fqbins_to_service_and_rpc_name(<<"Ateles">>, <<"AddMapFuns">>) ->
+    {'Ateles', 'AddMapFuns'};
+fqbins_to_service_and_rpc_name(<<"Ateles">>, <<"MapDocs">>) ->
+    {'Ateles', 'MapDocs'};
+fqbins_to_service_and_rpc_name(<<"Ateles">>, <<"Reset">>) ->
+    {'Ateles', 'Reset'};
 fqbins_to_service_and_rpc_name(S, R) ->
     error({gpb_error, {badservice_or_rpc, {S, R}}}).
 
@@ -2047,41 +2271,41 @@ fqbins_to_service_and_rpc_name(S, R) ->
 %% Convert a service name and an rpc name, both as atoms,
 %% to a fully qualified (ie with package name) service name and
 %% an rpc name as binaries.
-service_and_rpc_name_to_fqbins('ateles.Ateles',
+service_and_rpc_name_to_fqbins('Ateles',
 			       'CreateContext') ->
-    {<<"ateles.Ateles">>, <<"CreateContext">>};
-service_and_rpc_name_to_fqbins('ateles.Ateles',
+    {<<"Ateles">>, <<"CreateContext">>};
+service_and_rpc_name_to_fqbins('Ateles',
 			       'AddMapFuns') ->
-    {<<"ateles.Ateles">>, <<"AddMapFuns">>};
-service_and_rpc_name_to_fqbins('ateles.Ateles',
-			       'MapDocs') ->
-    {<<"ateles.Ateles">>, <<"MapDocs">>};
-service_and_rpc_name_to_fqbins('ateles.Ateles',
-			       'Reset') ->
-    {<<"ateles.Ateles">>, <<"Reset">>};
+    {<<"Ateles">>, <<"AddMapFuns">>};
+service_and_rpc_name_to_fqbins('Ateles', 'MapDocs') ->
+    {<<"Ateles">>, <<"MapDocs">>};
+service_and_rpc_name_to_fqbins('Ateles', 'Reset') ->
+    {<<"Ateles">>, <<"Reset">>};
 service_and_rpc_name_to_fqbins(S, R) ->
     error({gpb_error, {badservice_or_rpc, {S, R}}}).
 
 
-fqbin_to_msg_name(<<"ateles.CreateContextRequest">>) -> create_context_request;
-fqbin_to_msg_name(<<"ateles.CreateContextResponse">>) -> create_context_response;
-fqbin_to_msg_name(<<"ateles.AddMapFunsRequest">>) -> add_map_funs_request;
-fqbin_to_msg_name(<<"ateles.AddMapFunsResponse">>) -> add_map_funs_response;
-fqbin_to_msg_name(<<"ateles.MapDocsRequest">>) -> map_docs_request;
-fqbin_to_msg_name(<<"ateles.MapDocsResponse">>) -> map_docs_response;
-fqbin_to_msg_name(<<"ateles.ResetRequest">>) -> reset_request;
-fqbin_to_msg_name(<<"ateles.ResetResponse">>) -> reset_response;
+fqbin_to_msg_name(<<"CreateContextRequest">>) -> create_context_request;
+fqbin_to_msg_name(<<"CreateContextResponse">>) -> create_context_response;
+fqbin_to_msg_name(<<"MapFun">>) -> map_fun;
+fqbin_to_msg_name(<<"AddMapFunsRequest">>) -> add_map_funs_request;
+fqbin_to_msg_name(<<"AddMapFunsResponse">>) -> add_map_funs_response;
+fqbin_to_msg_name(<<"MapDocsRequest">>) -> map_docs_request;
+fqbin_to_msg_name(<<"MapDocsResponse">>) -> map_docs_response;
+fqbin_to_msg_name(<<"ResetRequest">>) -> reset_request;
+fqbin_to_msg_name(<<"ResetResponse">>) -> reset_response;
 fqbin_to_msg_name(E) -> error({gpb_error, {badmsg, E}}).
 
 
-msg_name_to_fqbin(create_context_request) -> <<"ateles.CreateContextRequest">>;
-msg_name_to_fqbin(create_context_response) -> <<"ateles.CreateContextResponse">>;
-msg_name_to_fqbin(add_map_funs_request) -> <<"ateles.AddMapFunsRequest">>;
-msg_name_to_fqbin(add_map_funs_response) -> <<"ateles.AddMapFunsResponse">>;
-msg_name_to_fqbin(map_docs_request) -> <<"ateles.MapDocsRequest">>;
-msg_name_to_fqbin(map_docs_response) -> <<"ateles.MapDocsResponse">>;
-msg_name_to_fqbin(reset_request) -> <<"ateles.ResetRequest">>;
-msg_name_to_fqbin(reset_response) -> <<"ateles.ResetResponse">>;
+msg_name_to_fqbin(create_context_request) -> <<"CreateContextRequest">>;
+msg_name_to_fqbin(create_context_response) -> <<"CreateContextResponse">>;
+msg_name_to_fqbin(map_fun) -> <<"MapFun">>;
+msg_name_to_fqbin(add_map_funs_request) -> <<"AddMapFunsRequest">>;
+msg_name_to_fqbin(add_map_funs_response) -> <<"AddMapFunsResponse">>;
+msg_name_to_fqbin(map_docs_request) -> <<"MapDocsRequest">>;
+msg_name_to_fqbin(map_docs_response) -> <<"MapDocsResponse">>;
+msg_name_to_fqbin(reset_request) -> <<"ResetRequest">>;
+msg_name_to_fqbin(reset_response) -> <<"ResetResponse">>;
 msg_name_to_fqbin(E) -> error({gpb_error, {badmsg, E}}).
 
 
@@ -2095,7 +2319,7 @@ enum_name_to_fqbin(E) ->
     error({gpb_error, {badenum, E}}).
 
 
-get_package_name() -> ateles.
+get_package_name() -> undefined.
 
 
 %% Whether or not the message names
@@ -2125,27 +2349,25 @@ get_all_proto_names() -> ["ateles"].
 get_msg_containment("ateles") ->
     [add_map_funs_request, add_map_funs_response,
      create_context_request, create_context_response,
-     map_docs_request, map_docs_response, reset_request,
-     reset_response];
+     map_docs_request, map_docs_response, map_fun,
+     reset_request, reset_response];
 get_msg_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
 
-get_pkg_containment("ateles") -> ateles;
+get_pkg_containment("ateles") -> undefined;
 get_pkg_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
 
-get_service_containment("ateles") -> ['ateles.Ateles'];
+get_service_containment("ateles") -> ['Ateles'];
 get_service_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
 
 get_rpc_containment("ateles") ->
-    [{'ateles.Ateles', 'CreateContext'},
-     {'ateles.Ateles', 'AddMapFuns'},
-     {'ateles.Ateles', 'MapDocs'},
-     {'ateles.Ateles', 'Reset'}];
+    [{'Ateles', 'CreateContext'}, {'Ateles', 'AddMapFuns'},
+     {'Ateles', 'MapDocs'}, {'Ateles', 'Reset'}];
 get_rpc_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
@@ -2155,19 +2377,20 @@ get_enum_containment(P) ->
     error({gpb_error, {badproto, P}}).
 
 
-get_proto_by_msg_name_as_fqbin(<<"ateles.ResetRequest">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.MapDocsRequest">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.CreateContextRequest">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.AddMapFunsRequest">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.ResetResponse">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.MapDocsResponse">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.CreateContextResponse">>) -> "ateles";
-get_proto_by_msg_name_as_fqbin(<<"ateles.AddMapFunsResponse">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"ResetRequest">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"MapDocsRequest">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"CreateContextRequest">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"AddMapFunsRequest">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"ResetResponse">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"MapDocsResponse">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"CreateContextResponse">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"AddMapFunsResponse">>) -> "ateles";
+get_proto_by_msg_name_as_fqbin(<<"MapFun">>) -> "ateles";
 get_proto_by_msg_name_as_fqbin(E) ->
     error({gpb_error, {badmsg, E}}).
 
 
-get_proto_by_service_name_as_fqbin(<<"ateles.Ateles">>) -> "ateles";
+get_proto_by_service_name_as_fqbin(<<"Ateles">>) -> "ateles";
 get_proto_by_service_name_as_fqbin(E) ->
     error({gpb_error, {badservice, E}}).
 
@@ -2177,7 +2400,7 @@ get_proto_by_enum_name_as_fqbin(E) ->
     error({gpb_error, {badenum, E}}).
 
 
-get_protos_by_pkg_name_as_fqbin(<<"ateles">>) -> ["ateles"];
+-spec get_protos_by_pkg_name_as_fqbin(_) -> no_return().
 get_protos_by_pkg_name_as_fqbin(E) ->
     error({gpb_error, {badpkg, E}}).
 

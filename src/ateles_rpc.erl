@@ -22,12 +22,17 @@
 ]).
 
 
+-type id() :: binary().
+-type context() :: #{id() := binary()}.
+
+
 % This isn't right, but leaving it here for now
 % grpcbox needs to be configured with the correct ateles channel
 % and it reads those from the environment. So at this stage I want to
 % configure it here, rather than having read it from a sys.config
 % This way later we can read the settings from default.ini and pass them in
 % here
+-spec init() -> ok.
 init() ->
     Opts = {grpcbox, [
       {client, #{
@@ -38,22 +43,22 @@ init() ->
     ]},
     application:set_env([Opts]),
     ok = application:stop(grpcbox),
-    io:format("AA ~p ~n", [application:get_all_env(grpcbox)]),
     {ok, _} = application:ensure_all_started(grpcbox),
     ok.
 
 
--spec create_context(any()) -> {ok, map(), map()} | {error, any()}.
+-spec create_context(context) -> {ok, map(), grpcbox:metadata()} |
+    {error, binary()}.
 create_context(CtxOpts) ->
-    ateles_ateles_client:create_context(CtxOpts, grpc_opts()).
+    ateles_client:create_context(CtxOpts, grpc_opts()).
 
 
 add_map_funs(MapFunOpts) ->
-    ateles_ateles_client:add_map_funs(MapFunOpts, grpc_opts()).
+    ateles_client:add_map_funs(MapFunOpts, grpc_opts()).
 
 
 map_docs() ->
-    ateles_ateles_client:map_docs(grpc_opts()).
+    ateles_client:map_docs(grpc_opts()).
 
 
 grpc_opts() ->
