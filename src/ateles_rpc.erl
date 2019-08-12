@@ -18,12 +18,25 @@
     init/0,
     create_context/1,
     add_map_funs/1,
-    map_docs/0
+    map_docs/0,
+    send/2,
+    recv/1
 ]).
 
 
--type id() :: binary().
--type context() :: #{id() := binary()}.
+-type metadata() :: grpcbox:metadata().
+-type empty() :: #{}.
+
+-type error_code() :: binary().
+-type error_msg() :: binary().
+-type error() :: {error, {error_code(), error_msg()}}.
+
+-type context() :: binary().
+
+-type map_funs() :: #{context_id := context(), fun() := binary()}.
+-type add_funs_opts() :: #{context_id := context(), map_funs := [map_funs()]}.
+
+-type stream_opts() :: map().
 
 
 % This isn't right, but leaving it here for now
@@ -35,11 +48,11 @@
 -spec init() -> ok.
 init() ->
     Opts = {grpcbox, [
-      {client, #{
-          channels => [
-            {ateles_js_channel, [{http, "localhost", 50051, []}], #{}}
-          ]}
-      }
+        {client, #{
+            channels => [
+                {ateles_js_channel, [{http, "localhost", 50051, []}], #{}}
+            ]}
+        }
     ]},
     application:set_env([Opts]),
     ok = application:stop(grpcbox),
@@ -47,18 +60,29 @@ init() ->
     ok.
 
 
--spec create_context(context) -> {ok, map(), grpcbox:metadata()} |
-    {error, binary()}.
+-spec create_context(context) -> {ok, empty(), metadata()} | error().
 create_context(CtxOpts) ->
     ateles_client:create_context(CtxOpts, grpc_opts()).
 
 
+-spec add_map_funs(add_funs_opts) -> {ok, empty(), metadata()} | error().
 add_map_funs(MapFunOpts) ->
     ateles_client:add_map_funs(MapFunOpts, grpc_opts()).
 
 
+-spec map_docs() -> {ok, stream_opts()} | error().
 map_docs() ->
     ateles_client:map_docs(grpc_opts()).
+
+
+-spec send(stream_opts(), map()) -> ok | error() | {error, binary()}.
+send(Stream, Data) ->
+    grpcbox_client:send(Stream, Data).
+
+
+-spec recv(stream_opts()) -> {ok, map()} | error() | {error, binary()}.
+recv(Stream) ->
+    grpcbox_client:recv_data(Stream).
 
 
 grpc_opts() ->

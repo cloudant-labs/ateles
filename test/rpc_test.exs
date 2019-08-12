@@ -36,6 +36,7 @@ defmodule RpcTest do
         map_funs: map_funs
       })
 
+
     assert resp == :ok
 
     docs =
