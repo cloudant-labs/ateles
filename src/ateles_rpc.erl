@@ -60,12 +60,12 @@ init() ->
     ok.
 
 
--spec create_context(context) -> {ok, empty(), metadata()} | error().
+-spec create_context(context()) -> {ok, empty(), metadata()} | error().
 create_context(CtxOpts) ->
     ateles_client:create_context(CtxOpts, grpc_opts()).
 
 
--spec add_map_funs(add_funs_opts) -> {ok, empty(), metadata()} | error().
+-spec add_map_funs(add_funs_opts()) -> {ok, empty(), metadata()} | error().
 add_map_funs(MapFunOpts) ->
     ateles_client:add_map_funs(MapFunOpts, grpc_opts()).
 
