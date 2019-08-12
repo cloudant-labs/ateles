@@ -7,7 +7,6 @@ defmodule RpcTest do
 
   test "creates context" do
     {resp, _, _} = :ateles_rpc.create_context(%{context_id: "context1"})
-    IO.inspect resp
     assert resp == :ok
 
     {resp, _} = :ateles_rpc.create_context(%{context_id: "context1"})

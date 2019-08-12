@@ -11,7 +11,7 @@
 % the License.
 
 {application, ateles,
-    [{description, "An OTP application"},
+    [{description, "GRPC client to work with Ateles"},
         {vsn, "0.1.0"},
         {registered, []},
         {mod, {ateles_app, []}},

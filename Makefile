@@ -9,7 +9,7 @@ compile:
 
 
 run:
-	rebar3 shell --apps ateles --config ./config/sys.config
+	rebar3 shell --apps grpcbox --config ./config/sys.config
 
 
 generate_proto:
