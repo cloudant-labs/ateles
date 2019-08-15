@@ -3,7 +3,7 @@
 %% @end
 %%%-------------------------------------------------------------------
 
-%% this module was generated on 2019-08-07T10:09:14+00:00 and should not be modified manually
+%% this module was generated on 2019-08-15T18:52:29+00:00 and should not be modified manually
 
 -module(ateles_client).
 

@@ -12,8 +12,6 @@
 
 syntax = "proto3";
 
-package ateles;
-
 service Ateles {
   rpc CreateContext(CreateContextRequest) returns (CreateContextResponse) {}
   rpc AddMapFuns(AddMapFunsRequest) returns (AddMapFunsResponse) {}
