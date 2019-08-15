@@ -10,20 +10,19 @@
 % License for the specific language governing permissions and limitations under
 % the License.
 
-{application, ateles,
-    [{description, "GRPC client to work with Ateles"},
-        {vsn, "0.1.0"},
-        {registered, []},
-        {mod, {ateles_app, []}},
-        {applications,
-            [kernel,
-                stdlib,
-                grpcbox,
-                ctx
-            ]},
-        {env,[]},
-        {modules, []},
-
-        {licenses, ["Apache 2.0"]},
-        {links, []}
-    ]}.
+{application, ateles, [
+    {description, "GRPC client to work with Ateles"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {mod, {ateles_app, []}},
+    {applications, [
+        kernel,
+        stdlib,
+        grpcbox,
+        ctx
+    ]},
+    {env,[]},
+    {modules, []},
+    {licenses, ["Apache 2.0"]},
+    {links, []}
+]}.
