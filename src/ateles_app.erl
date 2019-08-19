@@ -10,20 +10,22 @@
 % License for the specific language governing permissions and limitations under
 % the License.
 
-{application, ateles, [
-    {description, "GRPC client to work with Ateles"},
-    {vsn, "0.1.0"},
-    {registered, [
-        ateles_sup
-    ]},
-    {mod, {ateles_app, []}},
-    {applications, [
-        kernel,
-        stdlib,
-        grpcbox,
-        ctx
-    ]},
-    {env,[]},
-    {licenses, ["Apache 2.0"]},
-    {links, []}
-]}.
+-module(ateles_app).
+-behaviour(application).
+
+
+-export([
+    start/2,
+    stop/1
+]).
+
+
+start(_, _) ->
+    {ok, _} = application:ensure_all_started(grpcbox),
+    Endpoints = [{http, "localhost", 50051, []}],
+    {ok, _} = grpcbox_channel_sup:start_child(default_channel, Endpoints, #{}),
+    ateles_sup:start_link().
+
+
+stop(_) ->
+    ok.
