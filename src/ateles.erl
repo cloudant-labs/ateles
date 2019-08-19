@@ -34,13 +34,14 @@ destroy_map_context(Ctx) ->
 map_docs(Ctx, Docs) ->
     ok = ateles_worker:map_start(Ctx),
     try
-        Ids = lists:foldl(fun(Doc) ->
-            Id = couch_util:to_hex(crypto:strong_rand_bytes(16)),
-            JSON = couch_doc:to_json_obj(Doc, []),
-            ok = ateles_worker:map_doc(Ctx, Id, JSON),
+        Ids = lists:map(fun(Doc) ->
+            IdStr = couch_util:to_hex(crypto:strong_rand_bytes(16)),
+            Id = list_to_binary(IdStr),
+            Json = jiffy:encode(couch_doc:to_json_obj(Doc, [])),
+            ok = ateles_worker:map_doc(Ctx, Id, Json),
             Id
-        end, [], Docs),
-        Results = lists:foldl(fun(Id) ->
+        end, Docs),
+        Results = lists:map(fun(Id) ->
             case ateles_worker:get_result(Ctx, Id) of
                 {ok, Resp} ->
                     jiffy:decode(Resp, [return_maps]);
@@ -48,8 +49,10 @@ map_docs(Ctx, Docs) ->
                     % log the doc id and error? blah
                     []
             end
-        end, [], lists:reverse(Ids)),
-        lists:reverse(Results)
+        end, Ids),
+        {ok, Results}
+    catch T:R ->
+        io:format(standard_error, "BLECH: ~p ~p~n", [T, R])
     after
-        ok = ateles_worker:map_stop(Ctx)
+        ok = ateles_worker:map_end(Ctx)
     end.

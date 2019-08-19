@@ -13,6 +13,7 @@
 -module(ateles_basic_tests).
 
 
+-include_lib("couch/include/couch_db.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 
@@ -38,7 +39,8 @@ basic_test_() ->
             fun setup/0,
             fun teardown/1,
             [
-                ?TDEF(create_context)
+                ?TDEF(create_context),
+                ?TDEF(map_docs)
             ]
         }
     }.
@@ -65,3 +67,37 @@ create_context() ->
     after 4000 ->
         erlang:error({error, process_exit_timeout})
     end.
+
+
+map_docs() ->
+    CtxId = couch_util:to_hex(crypto:strong_rand_bytes(16)),
+    MapFuns = [
+        #{
+            id => <<"map_name">>,
+            'fun' => <<"function(doc) {emit(doc.value, null);}">>
+        }
+    ],
+    {ok, Ctx} = ateles:create_map_context(CtxId, {[]}, MapFuns),
+    try
+        Docs = lists:reverse(mkdocs(10)),
+        Expect = lists:map(fun(I) ->
+            [#{<<"id">> => <<"map_name">>, <<"result">> => [[I, null]]}]
+        end, lists:seq(1, 10)),
+        {ok, Results} = ateles:map_docs(Ctx, Docs),
+        ?assertEqual(Expect, Results)
+    after
+        ateles:destroy_map_context(Ctx)
+    end.
+
+
+mkdocs(0) ->
+    [];
+
+mkdocs(N) when N > 0 ->
+    Doc = #doc{
+        id = integer_to_binary(N),
+        body = {[
+            {value, N}
+        ]}
+    },
+    [Doc | mkdocs(N - 1)].

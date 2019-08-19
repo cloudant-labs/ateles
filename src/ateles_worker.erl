@@ -28,11 +28,11 @@
 ]).
 
 
-%% -ifdef(TEST).
-%% -define(TRACE(Fmt, Args), io:format(standard_error, Fmt ++ "~n", Args)).
-%% -else.
+-ifdef(TEST).
+-define(TRACE(Fmt, Args), io:format(standard_error, Fmt ++ "~n", Args)).
+-else.
 -define(TRACE(Fmt, Args), ok).
-%% -endif.
+-endif.
 
 
 start_link(CtxId, Lib, MapFuns) ->
@@ -49,7 +49,7 @@ stop(Pid) ->
 
 map_start(Pid) ->
     ?TRACE("~p map_start ~p", [self(), Pid]),
-    {ok, Resp} = gen:call(Pid, call, map_start),
+    {ok, Resp} = gen:call(Pid, call, map_start, 1000),
     Resp.
 
 
@@ -93,8 +93,8 @@ init(CtxId, Lib, MapFuns) ->
 
 loop(CtxId) ->
     receive
-        {call, From, start_map} ->
-            ?TRACE("~p start_map from ~p", [self(), From]),
+        {call, From, map_start} ->
+            ?TRACE("~p map_start from ~p", [self(), From]),
             {ok, Stream} = ateles_client:map_docs(),
             gen:reply(From, ok),
             loop(CtxId, Stream);
@@ -114,21 +114,21 @@ loop(CtxId, Stream) ->
                 map_id => Id,
                 doc => Doc
             },
-            ok = grpc_client:send(Stream, Req),
+            ok = grpcbox_client:send(Stream, Req),
             loop(CtxId, Stream);
         {call, From, {get_result, Id}} ->
             ?TRACE("~p get_result ~p : ~p", [self(), From, Id]),
-            {ok, Result} = grpc_client:recv(Stream),
-            #{
+            {ok, #{
                 ok := Ok,
                 map_id := Id,
-                result := Result
-            } = Result,
+                result := Json
+            }} = grpcbox_client:recv_data(Stream),
             Status = if Ok orelse Ok == 1 -> ok; true -> error end,
-            gen:reply(From, {Status, Result});
+            gen:reply(From, {Status, Json}),
+            loop(CtxId, Stream);
         {call, From, map_end} ->
             ?TRACE("~p map_end ~p", [self(), From]),
-            eos = grpc_client:close_and_recv(Stream),
+            stream_finished = grpcbox_client:close_and_recv(Stream),
             gen:reply(From, ok),
             loop(CtxId)
     end.
