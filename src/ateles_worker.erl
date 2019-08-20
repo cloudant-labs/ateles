@@ -28,11 +28,8 @@
 ]).
 
 
--ifdef(TEST).
 -define(TRACE(Fmt, Args), io:format(standard_error, Fmt ++ "~n", Args)).
--else.
--define(TRACE(Fmt, Args), ok).
--endif.
+%% -define(TRACE(Fmt, Args), ok).
 
 
 start_link(CtxId, Lib, MapFuns) ->
@@ -128,7 +125,8 @@ loop(CtxId, Stream) ->
             loop(CtxId, Stream);
         {call, From, map_end} ->
             ?TRACE("~p map_end ~p", [self(), From]),
-            stream_finished = grpcbox_client:close_and_recv(Stream),
+            %stream_finished = grpcbox_client:close_and_recv(Stream),
+            grpcbox_client:close_and_recv(Stream),
             gen:reply(From, ok),
             loop(CtxId)
     end.
