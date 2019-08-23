@@ -3,5 +3,7 @@ _build
 deps
 ebin
 
+priv/ateles
+
 src/ateles_client.erl
 src/ateles_pb.erl
