@@ -2,3 +2,6 @@
 _build
 deps
 ebin
+
+src/ateles_client.erl
+src/ateles_pb.erl

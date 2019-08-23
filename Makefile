@@ -10,19 +10,16 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-.PHONY: generate_proto, run
 
-
-all: compile
+all: generate compile
 
 
 compile:
-	rebar3 compile
+	@rebar compile
 
 
-run:
-	rebar3 shell --apps grpcbox --config ./config/sys.config
+generate: src/ateles_client.erl src/ateles_pb.erl
 
 
-generate_proto:
-	rebar3 grpc gen
+src/ateles_client.erl src/ateles_pb.erl: proto/ateles.proto
+	@REBAR_COLOR=none rebar3 grpc gen
