@@ -26,215 +26,224 @@
 
 #include "ateles.grpc.pb.h"
 #include "ateles_proto.h"
-#include "cxxopts.h"
-#include "lru.h"
-#include "worker.h"
-
-using grpc::Server;
-using grpc::ServerBuilder;
-using grpc::ServerContext;
-using grpc::ServerReader;
-using grpc::ServerReaderWriter;
-using grpc::ServerWriter;
-using grpc::Status;
-using grpc::StatusCode;
-using std::chrono::system_clock;
 
 namespace ateles
 {
-class AtelesImpl final : public Ateles::Service {
+class Server final {
   public:
-    explicit AtelesImpl() : _workers(50) {}
+    ~Server();
 
-    Status CreateContext(ServerContext* cx,
-        const CreateContextRequest* req,
-        CreateContextResponse* resp) override;
-
-    Status AddMapFuns(ServerContext* cx,
-        const AddMapFunsRequest* req,
-        AddMapFunsResponse* resp) override;
-
-    Status MapDocs(ServerContext* cx,
-        ServerReaderWriter<MapDocsResponse, MapDocsRequest>* stream) override;
-
-    Status Reset(ServerContext* cx,
-        const ResetRequest* req,
-        ResetResponse* resp) override;
+    void start();
+    void run();
 
   private:
-    Worker::Ptr get_worker(const std::string& ref);
-
-    std::mutex _worker_lock;
-    LRU<std::string, Worker::Ptr> _workers;
+    std::unique_ptr<grpc::Server> _server;
+    std::unique_ptr<grpc::ServerCompletionQueue> _queue;
+    Ateles::AsyncService _service;
 };
 
-Status
-AtelesImpl::CreateContext(ServerContext* cx,
-    const CreateContextRequest* req,
-    CreateContextResponse* resp)
+class Connection : public std::enable_shared_from_this<Connection> {
+  public:
+    typedef std::shared_ptr<Connection> Ptr;
+
+    Connection(Ateles::AsyncService* service,
+        grpc::ServerCompletionQueue* queue);
+    ~Connection();
+
+    void submit();
+
+    // State handlers
+    void handle_connected();
+    void handle_received();
+    void handle_sent();
+    void handle_finished();
+    void handle_disconnected();
+
+  private:
+    Ateles::AsyncService* _service;
+    grpc::ServerCompletionQueue* _queue;
+    grpc::ServerContext _context;
+    grpc::ServerAsyncReaderWriter<MapDocsResponse, MapDocsRequest> _stream;
+
+    MapDocsRequest _req;
+    MapDocsResponse _resp;
+
+    bool _connected;
+};
+
+class Task {
+  public:
+    typedef std::function<void(Connection::Ptr)> TaskCallBack;
+
+    explicit Task(Connection::Ptr conn, TaskCallBack cb) : _conn(conn), _cb(cb) {
+    }
+
+    void run() {
+        this->_cb(this->_conn);
+    }
+
+    void cancel() {
+        this->_conn->handle_finished();
+    }
+
+    long use_count() {
+        return this->_conn.use_count();
+    }
+
+  private:
+    Connection::Ptr _conn;
+    TaskCallBack _cb;
+};
+
+Server::~Server()
 {
-    std::unique_lock<std::mutex> lock(this->_worker_lock);
-
-    std::string cxid = req->context_id();
-    if(this->_workers.get(cxid)) {
-        return Status(
-            StatusCode::ALREADY_EXISTS, "The given context_id already exists.");
-    }
-
-    try {
-        this->_workers.put(cxid, Worker::create());
-    } catch(AtelesError& err) {
-        return Status(err.code(), err.what());
-    }
-
-    return Status::OK;
+    this->_server->Shutdown();
+    this->_queue->Shutdown();
 }
 
-Status
-AtelesImpl::AddMapFuns(ServerContext* cx,
-    const AddMapFunsRequest* req,
-    AddMapFunsResponse* resp)
+void
+Server::start()
 {
-    Worker::Ptr worker;
+    std::string server_address("0.0.0.0:50051");
 
-    try {
-        worker = this->get_worker(req->context_id());
-    } catch(AtelesError& err) {
-        return Status(err.code(), err.what());
-    }
+    grpc::ServerBuilder builder;
+    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.RegisterService(&(this->_service));
+    this->_queue = builder.AddCompletionQueue();
+    this->_server = builder.BuildAndStart();
+    std::cout << "Server listening on " << server_address << std::endl;
+}
 
-    JSFuture futures[req->map_funs_size() + 1];
+void
+Server::run()
+{
+    Connection::Ptr conn =
+        std::make_shared<Connection>(&(this->_service), this->_queue.get());
+    conn->submit();
+    conn.reset();
 
-    futures[0] = worker->set_lib(req->lib());
-    for(int i = 0; i < req->map_funs_size(); i++) {
-        const auto& map_fun = req->map_funs(i);
-        futures[i + 1] = worker->add_map_fun(map_fun.id(), map_fun.fun());
-    }
-
-    try {
-        for(int i = 0; i < req->map_funs_size() + 1; i++) {
-            futures[i].get();
+    void* tag;
+    bool ok;
+    while(true) {
+        if(!this->_queue->Next(&tag, &ok)) {
+            return;
         }
-    } catch(AtelesError& err) {
-        return Status(err.code(), err.what());
-    }
 
-    return Status::OK;
-}
-
-Status
-AtelesImpl::MapDocs(ServerContext* context,
-    ServerReaderWriter<MapDocsResponse, MapDocsRequest>* stream)
-{
-    MapDocsRequest req;
-    MapDocsResponse resp;
-    Worker::Ptr worker;
-
-    while(stream->Read(&req)) {
-        try {
-            worker = this->get_worker(req.context_id());
-        } catch(AtelesError& err) {
-            return Status(err.code(), err.what());
+        if(tag == nullptr) {
+            continue;
         }
 
-        try {
-            auto f = worker->map_doc(req.doc());
-            f.wait();
-            resp.set_ok(true);
-            resp.set_map_id(req.map_id());
-            resp.set_result(f.get());
-        } catch(AtelesError& err) {
-            resp.set_ok(false);
-            resp.set_map_id(std::to_string(err.code()));
-            resp.set_result(err.what());
+        Task* task = static_cast<Task*>(tag);
+
+        if(ok) {
+            task->run();
+        } else {
+            task->cancel();
         }
 
-        stream->Write(resp);
+        delete task;
     }
-    return Status::OK;
 }
 
-Status
-AtelesImpl::Reset(ServerContext* cx,
-    const ResetRequest* req,
-    ResetResponse* resp)
+Connection::Connection(Ateles::AsyncService* service,
+    grpc::ServerCompletionQueue* queue)
+    : _service(service), _queue(queue), _stream(&_context), _connected(false)
 {
-    std::unique_lock<std::mutex> lock(this->_worker_lock);
-    this->_workers.clear();
-    return Status::OK;
+    // This is fairly silly. If we don't set this then the
+    // call to this->_context.IsCancelled causes a segfault
+    // if a client disconnects mid stream. And the only reason
+    // we even have to call IsCancelled is because if we don't
+    // then this->_stream.Finish will cause a segfault. Le sigh.
+    this->_context.AsyncNotifyWhenDone(nullptr);
 }
 
-Worker::Ptr
-AtelesImpl::get_worker(const std::string& cxid)
+Connection::~Connection()
 {
-    std::unique_lock<std::mutex> lock(this->_worker_lock);
-    auto ret = this->_workers.get(cxid);
-    if(!ret) {
-        throw AtelesNotFoundError("Unknown context id: " + cxid);
-    }
-    return ret;
 }
+
+void
+Connection::submit()
+{
+    Ptr tptr = this->shared_from_this();
+    auto func = [](Ptr p) { p->handle_connected(); };
+    Task* t = new Task(tptr, func);
+    this->_service->RequestMapDocs(&_context, &_stream, _queue, _queue, t);
+}
+
+void
+Connection::handle_connected()
+{
+    Ptr tptr = this->shared_from_this();
+    auto func = [](Ptr p) { p->handle_received(); };
+    Task* t = new Task(tptr, func);
+    this->_stream.Read(&this->_req, t);
+
+    this->_connected = true;
+
+    // fprintf(stderr, "Connected: %s\n", this->_context.peer().c_str());
+
+    // Once we're in a connected state we have to
+    // add a new empty connection to wait for the next
+    // gRPC stream to connect. This is beyond odd.
+    Ptr new_conn = std::make_shared<Connection>(this->_service, this->_queue);
+    new_conn->submit();
+}
+
+void
+Connection::handle_received()
+{
+    Ptr tptr = this->shared_from_this();
+    auto func = [](Ptr p) { p->handle_sent(); };
+    Task* t = new Task(tptr, func);
+
+    this->_resp.set_ok(true);
+    this->_resp.set_result("ohai there");
+
+    this->_stream.Write(this->_resp, t);
+}
+
+void
+Connection::handle_sent()
+{
+    Ptr tptr = this->shared_from_this();
+    auto func = [](Ptr p) { p->handle_received(); };
+    Task* t = new Task(tptr, func);
+
+    this->_stream.Read(&this->_req, t);
+}
+
+void
+Connection::handle_finished()
+{
+    if(!this->_connected) {
+        return;
+    }
+
+    if(this->_context.IsCancelled()) {
+        return;
+    }
+
+    Ptr tptr = this->shared_from_this();
+    auto func = [](Ptr p) { p->handle_disconnected() ; };
+    Task* t = new Task(tptr, func);
+    this->_stream.Finish(grpc::Status::OK, t);
+}
+
+void
+Connection::handle_disconnected()
+{
+    // fprintf(stderr, "Disconnected: %s\n", this->_context.peer().c_str());
+}
+
 
 }  // namespace ateles
 
-void
-RunServer()
-{
-    std::string server_address("0.0.0.0:50051");
-    ateles::AtelesImpl service;
-
-    ServerBuilder builder;
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
-    builder.RegisterService(&service);
-    std::unique_ptr<Server> server(builder.BuildAndStart());
-    std::cout << "Listening at: " << server_address << std::endl;
-    server->Wait();
-}
-
-void
-exit_cleanly(int signum)
-{
-    exit(1);
-}
-
 int
-main(int argc, char** argv)
+main(int argc, const char* argv[])
 {
-    std::signal(SIGINT, exit_cleanly);
+    ateles::Server server;
+    server.start();
+    server.run();
 
-    // Docs say we have to create at least one JSContext
-    // in a single threaded manner. So here we are.
-    JS_Init();
-    JS_NewContext(8L * 1024 * 1024);
-
-    cxxopts::Options opts(argv[0], "A JavaScript engine for CouchDB\n");
-
-    // clang-format off
-    opts.add_options("", {
-        {"h,help", "Display this help message and exit."},
-        {"p,proto", "Dump the proto definition this binary was compiled with."}
-    });
-    // clang-format on
-
-    try {
-        auto cfg = opts.parse(argc, argv);
-
-        if(cfg["help"].as<bool>()) {
-            fprintf(stderr, "%s\n", opts.help().c_str());
-            exit(0);
-        }
-
-        if(cfg["proto"].as<bool>()) {
-            std::string proto((char*) ateles_proto_data, ateles_proto_len);
-            fprintf(stderr, "%s", proto.c_str());
-            exit(0);
-        }
-
-        RunServer();
-    } catch(cxxopts::OptionException& exc) {
-        fprintf(stderr, "Option error: %s\n", exc.what());
-        exit(1);
-    }
-
-    return 0;
+    exit(0);
 }

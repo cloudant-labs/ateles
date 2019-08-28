@@ -19,6 +19,7 @@ find_package(PkgConfig REQUIRED)
 pkg_check_modules(MOZJS REQUIRED mozjs-52)
 pkg_check_modules(PROTOBUF REQUIRED protobuf)
 pkg_check_modules(GRPC REQUIRED grpc++)
+pkg_check_modules(GPR REQUIRED gpr)
 
 find_program(PROTOC protoc)
 find_program(GRPC_PLUGIN grpc_cpp_plugin)
@@ -115,7 +116,7 @@ set(
 )
 
 
-file(GLOB SRC "c_src/*.cc")
+file(GLOB SRC "c_src/server.cc")
 add_executable(ateles ${ATELES_PB} ${ATELES_GRPC} ${GEN_HDR_LIST} ${SRC})
 
 set(CFLAGS
@@ -126,19 +127,23 @@ set(CFLAGS
     ${MOZJS_CFLAGS}
     ${PROTOBUF_CFLAGS}
     ${GRPC_CFLAGS}
+    ${GPR_CFLAGS}
     ${COVERAGE_OPTS})
 
 set(INCLUDES
     ${CMAKE_CURRENT_BINARY_DIR}
     ${MOZJS_INCLUDE_DIRS}
     ${PROTOBUF_INCLUDE_DIRS}
-    ${GRPC_INCLUDE_DIRS})
+    ${GRPC_INCLUDE_DIRS}
+    ${GPR_INCLUDE_DIRS})
 
 set(LDFLAGS
     ${MOZJS_LDFLAGS}
     ${PROTOBUF_LDFLAGS}
     ${GRPC_LDFLAGS}
-    ${COVERAGE_OPTS})
+    ${GPR_LDFLAGS}
+    ${COVERAGE_OPTS}
+    -lgrpc++_reflection)
 
 target_compile_options(ateles PUBLIC ${CFLAGS})
 target_include_directories(ateles PUBLIC ${INCLUDES})

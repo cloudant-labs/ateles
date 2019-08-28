@@ -40,6 +40,10 @@ generate: src/ateles_client.erl src/ateles_pb.erl
 src/ateles_client.erl src/ateles_pb.erl: proto/ateles.proto
 	@REBAR_COLOR=none rebar3 grpc gen
 
+eunit: export ERL_AFLAGS = -config $(shell pwd)/test/eunit.config
+eunit:
+	@rebar eunit
+
 
 coverage:
 	mkdir -p coverage/

@@ -13,58 +13,18 @@
 syntax = "proto3";
 
 service Ateles {
-  rpc CreateContext(CreateContextRequest) returns (CreateContextResponse) {}
-  rpc AddMapFuns(AddMapFunsRequest) returns (AddMapFunsResponse) {}
   rpc MapDocs(stream MapDocsRequest) returns (stream MapDocsResponse) {}
-  rpc Reset(ResetRequest) returns (ResetResponse) {}
-}
-
-
-message CreateContextRequest {
-    string context_id = 1;
-}
-
-
-message CreateContextResponse {
-
-}
-
-message MapFun {
-    string id = 1;
-    string fun = 2;
-}
-
-message AddMapFunsRequest {
-    string context_id = 1;
-    string lib = 2;
-    repeated MapFun map_funs = 3;
-}
-
-
-message AddMapFunsResponse {
-
 }
 
 
 message MapDocsRequest {
-    string context_id = 1;
-    string map_id = 2;
-    string doc = 3;
+    int32 state = 1;
+    string data = 2;
+    string extra = 3;
 }
 
 
 message MapDocsResponse {
     bool ok = 1;
-    string map_id = 2;
-    string result = 3;
-}
-
-
-message ResetRequest {
-
-}
-
-
-message ResetResponse {
-
+    string result = 2;
 }
