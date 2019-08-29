@@ -86,7 +86,7 @@ open_close_streams(Count, KeepOpen) ->
 
         case length(Streams1) > KeepOpen of
             true ->
-                [{_, ToClose} | Streams2] = Streams1,
+                [{_, ToClose} | Streams2] = lists:sort(Streams1),
                 grpcbox_client:close_and_recv(ToClose),
                 Streams2;
             false ->

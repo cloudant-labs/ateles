@@ -14,9 +14,12 @@
 #include <chrono>
 #include <cmath>
 #include <csignal>
+#include <future>
 #include <iostream>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <thread>
 
 #include <grpc/grpc.h>
 #include <grpcpp/security/server_credentials.h>
@@ -29,18 +32,40 @@
 
 namespace ateles
 {
+
+
+class Worker;
+
+
 class Server final {
   public:
     ~Server();
 
-    void start();
-    void run();
+    void start(size_t num_threads);
+    //void run();
+    void wait();
 
   private:
     std::unique_ptr<grpc::Server> _server;
-    std::unique_ptr<grpc::ServerCompletionQueue> _queue;
     Ateles::AsyncService _service;
+    std::list<std::unique_ptr<Worker>> _workers;
 };
+
+
+class Worker {
+  public:
+      typedef std::unique_ptr<Worker> Ptr;
+
+      explicit Worker(Ateles::AsyncService* service, std::unique_ptr<grpc::ServerCompletionQueue> queue, std::future<bool> go);
+
+  private:
+      void run(std::future<bool> go);
+
+      std::unique_ptr<std::thread> _thread;
+      Ateles::AsyncService* _service;
+      std::unique_ptr<grpc::ServerCompletionQueue> _queue;
+};
+
 
 class Connection : public std::enable_shared_from_this<Connection> {
   public:
@@ -60,6 +85,10 @@ class Connection : public std::enable_shared_from_this<Connection> {
     void handle_disconnected();
 
   private:
+    void _check_tid();
+
+    std::thread::id _tid;
+
     Ateles::AsyncService* _service;
     grpc::ServerCompletionQueue* _queue;
     grpc::ServerContext _context;
@@ -95,30 +124,82 @@ class Task {
     TaskCallBack _cb;
 };
 
+
+std::string
+get_tid()
+{
+    std::stringstream ss;
+    ss << std::this_thread::get_id();
+    return ss.str();
+}
+
+
 Server::~Server()
 {
     this->_server->Shutdown();
-    this->_queue->Shutdown();
 }
 
+
 void
-Server::start()
+Server::start(size_t num_threads)
 {
     std::string server_address("0.0.0.0:50051");
 
     grpc::ServerBuilder builder;
     builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
     builder.RegisterService(&(this->_service));
-    this->_queue = builder.AddCompletionQueue();
+
+    std::list<std::promise<bool>> promises;
+
+    for(size_t i = 0; i < num_threads; i++) {
+        std::promise<bool> promise;
+        auto f = promise.get_future();
+        auto cq = builder.AddCompletionQueue();
+        auto w = std::make_unique<Worker>(&this->_service, std::move(cq), std::move(f));
+        promises.push_back(std::move(promise));
+        this->_workers.push_back(std::move(w));
+    }
+
     this->_server = builder.BuildAndStart();
     std::cout << "Server listening on " << server_address << std::endl;
+
+    for(auto & promise : promises) {
+        promise.set_value(true);
+    }
+}
+
+// void
+// Server::run()
+// {
+//
+// }
+
+void
+Server::wait()
+{
+    this->_server->Wait();
+}
+
+Worker::Worker(Ateles::AsyncService* service, std::unique_ptr<grpc::ServerCompletionQueue> queue, std::future<bool> go)
+    : _service(service), _queue(std::move(queue))
+{
+    this->_thread =
+        std::make_unique<std::thread>(&Worker::run, this, std::move(go));
+    this->_thread->detach();
 }
 
 void
-Server::run()
+Worker::run(std::future<bool> go)
 {
+    go.wait();
+    if(!go.get()) {
+        return;
+    }
+
+    fprintf(stderr, "Thread: %s\n", get_tid().c_str());
+
     Connection::Ptr conn =
-        std::make_shared<Connection>(&(this->_service), this->_queue.get());
+        std::make_shared<Connection>(this->_service, this->_queue.get());
     conn->submit();
     conn.reset();
 
@@ -147,7 +228,7 @@ Server::run()
 
 Connection::Connection(Ateles::AsyncService* service,
     grpc::ServerCompletionQueue* queue)
-    : _service(service), _queue(queue), _stream(&_context), _connected(false)
+    : _tid(std::this_thread::get_id()), _service(service), _queue(queue), _stream(&_context), _connected(false)
 {
     // This is fairly silly. If we don't set this then the
     // call to this->_context.IsCancelled causes a segfault
@@ -164,6 +245,7 @@ Connection::~Connection()
 void
 Connection::submit()
 {
+    this->_check_tid();
     Ptr tptr = this->shared_from_this();
     auto func = [](Ptr p) { p->handle_connected(); };
     Task* t = new Task(tptr, func);
@@ -173,14 +255,13 @@ Connection::submit()
 void
 Connection::handle_connected()
 {
+    this->_check_tid();
     Ptr tptr = this->shared_from_this();
     auto func = [](Ptr p) { p->handle_received(); };
     Task* t = new Task(tptr, func);
     this->_stream.Read(&this->_req, t);
 
     this->_connected = true;
-
-    // fprintf(stderr, "Connected: %s\n", this->_context.peer().c_str());
 
     // Once we're in a connected state we have to
     // add a new empty connection to wait for the next
@@ -192,6 +273,7 @@ Connection::handle_connected()
 void
 Connection::handle_received()
 {
+    this->_check_tid();
     Ptr tptr = this->shared_from_this();
     auto func = [](Ptr p) { p->handle_sent(); };
     Task* t = new Task(tptr, func);
@@ -205,6 +287,7 @@ Connection::handle_received()
 void
 Connection::handle_sent()
 {
+    this->_check_tid();
     Ptr tptr = this->shared_from_this();
     auto func = [](Ptr p) { p->handle_received(); };
     Task* t = new Task(tptr, func);
@@ -215,6 +298,7 @@ Connection::handle_sent()
 void
 Connection::handle_finished()
 {
+    this->_check_tid();
     if(!this->_connected) {
         return;
     }
@@ -232,7 +316,16 @@ Connection::handle_finished()
 void
 Connection::handle_disconnected()
 {
-    // fprintf(stderr, "Disconnected: %s\n", this->_context.peer().c_str());
+    this->_check_tid();
+}
+
+
+void
+Connection::_check_tid()
+{
+    if(std::this_thread::get_id() != this->_tid) {
+        exit(127);
+    }
 }
 
 
@@ -242,8 +335,8 @@ int
 main(int argc, const char* argv[])
 {
     ateles::Server server;
-    server.start();
-    server.run();
+    server.start(5);
+    server.wait();
 
     exit(0);
 }
