@@ -16,7 +16,7 @@ project (ateles)
 # Configure dependencies
 # Eventually we'll want to expand the mozjs version range
 find_package(PkgConfig REQUIRED)
-pkg_check_modules(MOZJS REQUIRED mozjs-52)
+pkg_check_modules(MOZJS REQUIRED mozjs-60)
 pkg_check_modules(PROTOBUF REQUIRED protobuf)
 pkg_check_modules(GRPC REQUIRED grpc++)
 pkg_check_modules(GPR REQUIRED gpr)
@@ -116,7 +116,7 @@ set(
 )
 
 
-file(GLOB SRC "c_src/server.cc")
+file(GLOB SRC "c_src/*.cc")
 add_executable(ateles ${ATELES_PB} ${ATELES_GRPC} ${GEN_HDR_LIST} ${SRC})
 
 set(CFLAGS

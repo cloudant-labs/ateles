@@ -20,24 +20,37 @@
 
 namespace ateles
 {
-typedef std::promise<std::string> JSPromise;
-typedef std::future<std::string> JSFuture;
 
-class Context {
+class JSCompartment;
+
+class JSCx {
   public:
-    explicit Context();
+    typedef std::unique_ptr<JSCx> Ptr;
 
-    std::string set_lib(const std::string& lib);
-    std::string add_map_fun(const std::string& id, const std::string& source);
-    std::string map_doc(const std::string& doc);
+    explicit JSCx();
+
+    std::unique_ptr<JSCompartment> new_compartment();
 
   private:
-    std::string transpile(const std::string& source);
-
     std::unique_ptr<JSContext, void (*)(JSContext*)> _cx;
-    JS::RootedObject* _conv_global;
-    JS::RootedObject* _global;
 };
+
+
+class JSCompartment {
+public:
+    typedef std::unique_ptr<JSCompartment> Ptr;
+
+    explicit JSCompartment(JSContext* cx);
+    ~JSCompartment();
+
+    std::string eval(const std::string& script, std::vector<std::string>& args);
+    std::string call(const std::string& name, std::vector<std::string>& args);
+
+private:
+    JSContext* _cx;
+    JS::PersistentRootedObject _global;
+};
+
 
 std::string js_to_string(JSContext* cx, JS::HandleValue val);
 JSString* string_to_js(JSContext* cx, const std::string& s);

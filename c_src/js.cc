@@ -32,11 +32,12 @@ static JSClassOps global_ops = {nullptr,
     nullptr,
     nullptr,
     nullptr,
-    nullptr,
     JS_GlobalObjectTraceHook};
+
 
 /* The class of the global object. */
 static JSClass global_class = {"global", JSCLASS_GLOBAL_FLAGS, &global_ops};
+
 
 static bool
 print_fun(JSContext* cx, unsigned argc, JS::Value* vp)
@@ -50,168 +51,173 @@ print_fun(JSContext* cx, unsigned argc, JS::Value* vp)
     return true;
 }
 
+
 JSContext*
-create_context()
+create_jscontext()
 {
-    JSContext* cx = JS_NewContext(8L * 1024 * 1024);
+    JSContext* cx = JS_NewContext(128L * 1024 * 1024);
+
+    JS::ContextOptionsRef(cx)
+        .setBaseline(false)
+        .setIon(false)
+        .setAsmJS(false)
+        .setWasm(false)
+        .setWasmBaseline(false)
+        .setWasmIon(false);
+
     if(cx == nullptr) {
         throw AtelesInternalError("Error creating JavaScript context.");
     }
+
     if(!JS::InitSelfHostedCode(cx)) {
         throw AtelesInternalError("Error initializing self hosted code.");
     }
+
     return cx;
 }
 
-Context::Context() : _cx(create_context(), JS_DestroyContext)
-{
-    JSAutoRequest ar(this->_cx.get());
 
+JSCx::JSCx() : _cx(create_jscontext(), JS_DestroyContext)
+{
+}
+
+
+std::unique_ptr<JSCompartment>
+JSCx::new_compartment()
+{
+    return std::make_unique<JSCompartment>(this->_cx.get());
+}
+
+
+JSCompartment::JSCompartment(JSContext* cx) : _cx(cx)
+{
+    JSAutoRequest ar(this->_cx);
     JS::CompartmentOptions options;
-    this->_conv_global = new JS::RootedObject(this->_cx.get(),
-        JS_NewGlobalObject(this->_cx.get(),
+
+    JSObject* global = JS_NewGlobalObject(this->_cx,
+        &global_class,
+        nullptr,
+        JS::FireOnNewGlobalHook,
+        options);
+
+    if(global == nullptr) {
+        // Force GC and try again
+        JS_GC(this->_cx);
+        global = JS_NewGlobalObject(this->_cx,
             &global_class,
             nullptr,
             JS::FireOnNewGlobalHook,
-            options));
+            options);
 
-    if(this->_conv_global == nullptr) {
-        throw AtelesInternalError("Error allocating conversion global object.");
-    }
-
-    this->_global = new JS::RootedObject(this->_cx.get(),
-        JS_NewGlobalObject(this->_cx.get(),
-            &global_class,
-            nullptr,
-            JS::FireOnNewGlobalHook,
-            options));
-
-    if(this->_global == nullptr) {
-        throw AtelesInternalError("Error allocating global object.");
-    }
-
-    {
-        // Scope to the conv compartment
-        JSAutoCompartment ac(this->_cx.get(), *this->_conv_global);
-        JS_InitStandardClasses(this->_cx.get(), *this->_conv_global);
-
-        load_script(this->_cx.get(),
-            "esprima.js",
-            std::string((char*) esprima_data, esprima_len));
-        load_script(this->_cx.get(),
-            "escodegen.js",
-            std::string((char*) escodegen_data, escodegen_len));
-        load_script(this->_cx.get(),
-            "rewrite_anon_fun.js",
-            std::string((char*) rewrite_anon_fun_data, rewrite_anon_fun_len));
-    }
-
-    {
-        // Scope to the map compartment
-        JSAutoCompartment ac(this->_cx.get(), *this->_global);
-        JS_InitStandardClasses(this->_cx.get(), *this->_global);
-
-        load_script(this->_cx.get(),
-            "ateles_map.js",
-            std::string((char*) ateles_map_data, ateles_map_len));
-
-        JS::HandleObject global_obj(this->_global);
-        if(!JS_DefineFunction(
-               this->_cx.get(), global_obj, "print", print_fun, 1, 0)) {
-            throw AtelesInternalError("Error installing print function.");
+        // But give up if that fails
+        if(global == nullptr) {
+            throw AtelesResourceExhaustedError("Unable to allocate new global object.");
         }
     }
+
+    this->_global.init(this->_cx, global);
+
+    JSAutoCompartment ac(this->_cx, this->_global.get());
+    JS_InitStandardClasses(this->_cx, this->_global);
+
+    JS::HandleObject global_obj(this->_global);
+    if(!JS_DefineFunction(
+           this->_cx, global_obj, "print", print_fun, 1, 0)) {
+        throw AtelesInternalError("Error installing print function.");
+    }
 }
 
-std::string
-Context::set_lib(const std::string& lib)
+
+JSCompartment::~JSCompartment()
 {
-    return "";
+    this->_global.reset();
 }
 
-std::string
-Context::add_map_fun(const std::string& id, const std::string& source)
-{
-    std::string conv = this->transpile(source);
 
-    JSAutoRequest ar(this->_cx.get());
-    JSAutoCompartment ac(this->_cx.get(), *this->_global);
+std::string
+JSCompartment::eval(const std::string& script, std::vector<std::string>& args)
+{
+    JSAutoRequest ar(this->_cx);
+    JSAutoCompartment ac(this->_cx, this->_global.get());
+
+    // parse args as key=value pairs
+    // for things like filename and line number
+    // and maybe compile options eventually?
+
+    std::string file = "<unknown>";
+    unsigned line = 1;
+
+    for(auto const& arg : args) {
+        auto idx = arg.find("=");
+        if(idx == std::string::npos) {
+            throw AtelesInvalidArgumentError("Invalid option: " + arg);
+        }
+        std::string key = arg.substr(0, idx);
+        std::string val = arg.substr(idx + 1);
+
+        if(key == "file") {
+            file = val;
+        } else if(key == "line") {
+            try {
+                line = std::stoul(val);
+            } catch(...) {
+                throw AtelesInvalidArgumentError("Invalid line number: " + val);
+            }
+        } else {
+            throw AtelesInvalidArgumentError("Unknown eval option: " + key);
+        }
+    }
+
+    JS::RootedValue rval(this->_cx);
+    JS::CompileOptions opts(this->_cx);
+    opts.setFileAndLine(file.c_str(), line);
+    if(!JS::Evaluate(this->_cx, opts, script.c_str(), script.size(), &rval)) {
+        JS::RootedValue exc(this->_cx);
+        if(!JS_GetPendingException(this->_cx, &exc)) {
+            throw AtelesInternalError(
+                "Unknown error evaluating script: " + file);
+        } else {
+            JS_ClearPendingException(this->_cx);
+            throw AtelesInvalidArgumentError(
+                "Error evaluating script: " + format_exception(this->_cx, exc));
+        }
+    }
+
+    return format_value(this->_cx, rval);
+}
+
+
+std::string
+JSCompartment::call(const std::string& name, std::vector<std::string>& args)
+{
+    JSAutoRequest ar(this->_cx);
+    JSAutoCompartment ac(this->_cx, this->_global.get());
 
     JS::HandleObject this_obj(this->_global);
-    JS::AutoValueArray<2> argv(this->_cx.get());
-    argv[0].setString(string_to_js(this->_cx.get(), id));
-    argv[1].setString(string_to_js(this->_cx.get(), conv));
+    JS::AutoValueVector jsargs(this->_cx);
 
-    JS::RootedValue rval(this->_cx.get());
+    for(std::size_t i = 0; i < args.size(); i++) {
+        auto str = JS::StringValue(string_to_js(this->_cx, args[i]));
+        if(!jsargs.append(str)) {
+            throw AtelesInternalError("Error creating arguments vector.");
+        }
+    }
 
-    if(!JS::Call(this->_cx.get(), this_obj, "addFun", argv, &rval)) {
-        JS::RootedValue exc(this->_cx.get());
-        if(!JS_GetPendingException(this->_cx.get(), &exc)) {
+    JS::RootedValue rval(this->_cx);
+
+    if(!JS::Call(this->_cx, this_obj, name.c_str(), jsargs, &rval)) {
+        JS::RootedValue exc(this->_cx);
+        if(!JS_GetPendingException(this->_cx, &exc)) {
             throw AtelesInternalError(
-                "Unknown error when adding map function.");
+                "Unknown calling function.");
         } else {
-            JS_ClearPendingException(this->_cx.get());
-            throw AtelesInvalidArgumentError("Error adding map function: "
-                + format_exception(this->_cx.get(), exc));
+            JS_ClearPendingException(this->_cx);
+            throw AtelesInvalidArgumentError("Error calling function: "
+                + format_exception(this->_cx, exc));
         }
     }
 
-    return "";
-}
-
-std::string
-Context::map_doc(const std::string& doc)
-{
-    JSAutoRequest ar(this->_cx.get());
-    JSAutoCompartment ac(this->_cx.get(), *this->_global);
-
-    JS::HandleObject this_obj(this->_global);
-
-    JSString* js_doc = string_to_js(this->_cx.get(), doc);
-
-    JS::AutoValueArray<1> argv(this->_cx.get());
-    argv[0].setString(js_doc);
-
-    JS::RootedValue rval(this->_cx.get());
-
-    if(!JS::Call(this->_cx.get(), this_obj, "mapDoc", argv, &rval)) {
-        JS::RootedValue exc(this->_cx.get());
-        if(!JS_GetPendingException(this->_cx.get(), &exc)) {
-            throw AtelesInternalError("Unknown mapping document.");
-        } else {
-            JS_ClearPendingException(this->_cx.get());
-            throw AtelesInvalidArgumentError("Error mapping document: "
-                + format_exception(this->_cx.get(), exc));
-        }
-    }
-
-    return js_to_string(this->_cx.get(), rval);
-}
-
-std::string
-Context::transpile(const std::string& source)
-{
-    JSAutoRequest ar(this->_cx.get());
-    JSAutoCompartment ac(this->_cx.get(), *this->_conv_global);
-
-    JS::HandleObject this_obj(this->_conv_global);
-    JS::AutoValueArray<1> argv(this->_cx.get());
-    argv[0].setString(string_to_js(this->_cx.get(), source));
-    JS::RootedValue rval(this->_cx.get());
-
-    if(!JS::Call(this->_cx.get(), this_obj, "rewriteAnonFun", argv, &rval)) {
-        JS::RootedValue exc(this->_cx.get());
-        if(!JS_GetPendingException(this->_cx.get(), &exc)) {
-            throw AtelesInternalError(
-                "Unknown error converting anonymous JavaScript function.");
-        } else {
-            JS_ClearPendingException(this->_cx.get());
-            throw AtelesInvalidArgumentError("Invalid JavaScript function: "
-                + format_exception(this->_cx.get(), exc));
-        }
-    }
-
-    return js_to_string(this->_cx.get(), rval);
+    return format_value(this->_cx, rval);
 }
 
 }  // namespace ateles

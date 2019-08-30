@@ -23,9 +23,15 @@
 start(_, _) ->
     {ok, _} = application:ensure_all_started(grpcbox),
     Endpoints = [{http, "127.0.0.1", 50051, []}],
-    {ok, _} = grpcbox_channel_sup:start_child(default_channel, Endpoints, #{}),
+    {ok, Pid} = grpcbox_channel_sup:start_child(ateles, Endpoints, #{}),
+    ok = application:set_env(ateles, channel_pid, Pid),
     ateles_sup:start_link().
 
 
 stop(_) ->
+    {ok, Pid} = application:get_env(ateles, channel_pid),
+    case is_pid(Pid) andalso is_process_alive(Pid) of
+        true -> grpcbox_channel:stop(Pid);
+        false -> ok
+    end,
     ok.

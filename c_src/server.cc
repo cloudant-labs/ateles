@@ -11,6 +11,7 @@
 // the License.
 
 #include <algorithm>
+#include <atomic>
 #include <chrono>
 #include <cmath>
 #include <csignal>
@@ -29,12 +30,16 @@
 
 #include "ateles.grpc.pb.h"
 #include "ateles_proto.h"
+#include "errors.h"
+#include "js.h"
+
 
 namespace ateles
 {
 
 
 class Worker;
+class Task;
 
 
 class Server final {
@@ -72,32 +77,36 @@ class Connection : public std::enable_shared_from_this<Connection> {
     typedef std::shared_ptr<Connection> Ptr;
 
     Connection(Ateles::AsyncService* service,
-        grpc::ServerCompletionQueue* queue);
+        grpc::ServerCompletionQueue* queue,
+        JSCx* vm);
     ~Connection();
 
     void submit();
 
     // State handlers
     void handle_connected();
-    void handle_received();
-    void handle_sent();
+    void handle_request();
+    void handle_response();
     void handle_finished();
     void handle_disconnected();
 
+    void check_tid();
+
   private:
-    void _check_tid();
+    Task* _mktask(std::function<void(Ptr)> func);
 
     std::thread::id _tid;
 
     Ateles::AsyncService* _service;
     grpc::ServerCompletionQueue* _queue;
     grpc::ServerContext _context;
-    grpc::ServerAsyncReaderWriter<MapDocsResponse, MapDocsRequest> _stream;
+    grpc::ServerAsyncReaderWriter<JSResponse, JSRequest> _stream;
 
-    MapDocsRequest _req;
-    MapDocsResponse _resp;
+    JSRequest _req;
+    JSResponse _resp;
 
-    bool _connected;
+    JSCx* _cx;
+    JSCompartment::Ptr _compartment;
 };
 
 class Task {
@@ -108,6 +117,7 @@ class Task {
     }
 
     void run() {
+        this->_conn->check_tid();
         this->_cb(this->_conn);
     }
 
@@ -198,8 +208,10 @@ Worker::run(std::future<bool> go)
 
     fprintf(stderr, "Thread: %s\n", get_tid().c_str());
 
+    JSCx::Ptr cx = std::make_unique<JSCx>();
+
     Connection::Ptr conn =
-        std::make_shared<Connection>(this->_service, this->_queue.get());
+        std::make_shared<Connection>(this->_service, this->_queue.get(), cx.get());
     conn->submit();
     conn.reset();
 
@@ -227,8 +239,8 @@ Worker::run(std::future<bool> go)
 }
 
 Connection::Connection(Ateles::AsyncService* service,
-    grpc::ServerCompletionQueue* queue)
-    : _tid(std::this_thread::get_id()), _service(service), _queue(queue), _stream(&_context), _connected(false)
+    grpc::ServerCompletionQueue* queue, JSCx* cx)
+    : _tid(std::this_thread::get_id()), _service(service), _queue(queue), _stream(&_context), _cx(cx)
 {
     // This is fairly silly. If we don't set this then the
     // call to this->_context.IsCancelled causes a segfault
@@ -240,88 +252,95 @@ Connection::Connection(Ateles::AsyncService* service,
 
 Connection::~Connection()
 {
+    this->check_tid();
 }
 
 void
 Connection::submit()
 {
-    this->_check_tid();
-    Ptr tptr = this->shared_from_this();
-    auto func = [](Ptr p) { p->handle_connected(); };
-    Task* t = new Task(tptr, func);
-    this->_service->RequestMapDocs(&_context, &_stream, _queue, _queue, t);
+    Task* t = this->_mktask([](Ptr p) { p->handle_connected(); });
+    this->_service->RequestExecute(&_context, &_stream, _queue, _queue, t);
 }
 
 void
 Connection::handle_connected()
 {
-    this->_check_tid();
-    Ptr tptr = this->shared_from_this();
-    auto func = [](Ptr p) { p->handle_received(); };
-    Task* t = new Task(tptr, func);
-    this->_stream.Read(&this->_req, t);
-
-    this->_connected = true;
-
     // Once we're in a connected state we have to
     // add a new empty connection to wait for the next
     // gRPC stream to connect. This is beyond odd.
-    Ptr new_conn = std::make_shared<Connection>(this->_service, this->_queue);
+    Ptr new_conn = std::make_shared<Connection>(this->_service, this->_queue, this->_cx);
     new_conn->submit();
+
+    try {
+        this->_compartment = this->_cx->new_compartment();
+    } catch(AtelesError& err) {
+        Task* t = this->_mktask([](Ptr p) { p->handle_disconnected(); });
+        grpc::Status status(err.code(), err.what());
+        this->_stream.Finish(status, t);
+        return;
+    }
+
+    Task* t = this->_mktask([](Ptr p) { p->handle_request(); });
+    this->_stream.Read(&this->_req, t);
 }
 
+
 void
-Connection::handle_received()
+Connection::handle_request()
 {
-    this->_check_tid();
-    Ptr tptr = this->shared_from_this();
-    auto func = [](Ptr p) { p->handle_sent(); };
-    Task* t = new Task(tptr, func);
+    this->_resp.Clear();
+    this->_resp.set_status(0);
 
-    this->_resp.set_ok(true);
-    this->_resp.set_result("ohai there");
+    std::vector<std::string> args;
+    for(int i = 0; i < this->_req.args_size(); i++) {
+        args.push_back(this->_req.args(i));
+    }
 
+    try {
+        std::string result;
+        if(this->_req.action() == JSRequest_Action_EVAL) {
+            result = this->_compartment->eval(this->_req.script(), args);
+        } else {
+            result = this->_compartment->call(this->_req.script(), args);
+        }
+        this->_resp.set_result(result);
+    } catch(AtelesError& err) {
+        this->_resp.set_status(err.code());
+        this->_resp.set_result(err.what());
+    }
+
+    Task* t = this->_mktask([](Ptr p) { p->handle_response(); });
     this->_stream.Write(this->_resp, t);
 }
 
-void
-Connection::handle_sent()
-{
-    this->_check_tid();
-    Ptr tptr = this->shared_from_this();
-    auto func = [](Ptr p) { p->handle_received(); };
-    Task* t = new Task(tptr, func);
 
+void
+Connection::handle_response()
+{
+    Task* t = this->_mktask([](Ptr p) { p->handle_request(); });
     this->_stream.Read(&this->_req, t);
 }
+
 
 void
 Connection::handle_finished()
 {
-    this->_check_tid();
-    if(!this->_connected) {
-        return;
-    }
-
     if(this->_context.IsCancelled()) {
         return;
     }
 
-    Ptr tptr = this->shared_from_this();
-    auto func = [](Ptr p) { p->handle_disconnected() ; };
-    Task* t = new Task(tptr, func);
+    Task* t = this->_mktask([](Ptr p) { p->handle_disconnected(); });
     this->_stream.Finish(grpc::Status::OK, t);
 }
 
 void
 Connection::handle_disconnected()
 {
-    this->_check_tid();
 }
 
 
 void
-Connection::_check_tid()
+Connection::check_tid()
 {
     if(std::this_thread::get_id() != this->_tid) {
         exit(127);
@@ -329,11 +348,23 @@ Connection::_check_tid()
 }
 
 
+Task*
+Connection::_mktask(std::function<void(Ptr)> func)
+{
+    Ptr tptr = this->shared_from_this();
+    return new Task(tptr, func);
+}
+
 }  // namespace ateles
 
 int
 main(int argc, const char* argv[])
 {
+    // Docs say we have to create at least one JSContext
+    // in a single threaded manner. So here we are.
+    JS_Init();
+    JS_NewContext(8L * 1024 * 1024);
+
     ateles::Server server;
     server.start(5);
     server.wait();

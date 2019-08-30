@@ -30,7 +30,7 @@ teardown(Apps) ->
     end, lists:reverse(Apps)).
 
 
-basic_test_() ->
+empty_streams_test_() ->
     {
         "Test basic ateles operations",
         {
@@ -81,7 +81,7 @@ open_close_streams(Count) ->
 
 open_close_streams(Count, KeepOpen) ->
     OpenStreams = lists:foldl(fun(_, Streams0) ->
-        {ok, Stream} = ateles_client:map_docs(),
+        {ok, Stream} = ateles_client:execute(#{channel => ateles}),
         Streams1 = [{rand:uniform(), Stream} | Streams0],
 
         case length(Streams1) > KeepOpen of
