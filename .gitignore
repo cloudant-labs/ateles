@@ -4,8 +4,13 @@ _build
 deps
 ebin
 
+coverage/
+
 erl_crash.dump
 rebar3.crashdump
+
+default.profdata
+default.profraw
 
 priv/ateles
 

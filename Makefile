@@ -49,7 +49,7 @@ coverage:
 	mkdir -p coverage/
 	rm -rf coverage/*
 	/Library/Developer/CommandLineTools/usr/bin/llvm-profdata merge -sparse default.profraw -o default.profdata
-	/Library/Developer/CommandLineTools/usr/bin/llvm-cov show build/ateles -instr-profile=default.profdata -format=html -output-dir=coverage/
+	/Library/Developer/CommandLineTools/usr/bin/llvm-cov show priv/ateles -instr-profile=default.profdata -format=html -output-dir=coverage/
 	open coverage/index.html
 
 

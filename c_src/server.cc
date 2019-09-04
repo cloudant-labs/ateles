@@ -357,9 +357,19 @@ Connection::_mktask(std::function<void(Ptr)> func)
 
 }  // namespace ateles
 
+
+void
+exit_cleanly(int signum)
+{
+    exit(1);
+}
+
+
 int
 main(int argc, const char* argv[])
 {
+    std::signal(SIGINT, exit_cleanly);
+
     // Docs say we have to create at least one JSContext
     // in a single threaded manner. So here we are.
     JS_Init();
