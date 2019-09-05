@@ -57,6 +57,10 @@ create_jscontext()
 {
     JSContext* cx = JS_NewContext(128L * 1024 * 1024);
 
+    if(cx == nullptr) {
+        throw AtelesInternalError("Error creating JavaScript context.");
+    }
+
     JS::ContextOptionsRef(cx)
         .setBaseline(false)
         .setIon(false)
@@ -64,10 +68,6 @@ create_jscontext()
         .setWasm(false)
         .setWasmBaseline(false)
         .setWasmIon(false);
-
-    if(cx == nullptr) {
-        throw AtelesInternalError("Error creating JavaScript context.");
-    }
 
     if(!JS::InitSelfHostedCode(cx)) {
         throw AtelesInternalError("Error initializing self hosted code.");
@@ -102,6 +102,7 @@ JSCompartment::JSCompartment(JSContext* cx) : _cx(cx)
 
     if(global == nullptr) {
         // Force GC and try again
+        fprintf(stderr, "GARBAGE COLLECTING!\n");
         JS_GC(this->_cx);
         global = JS_NewGlobalObject(this->_cx,
             &global_class,
