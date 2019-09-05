@@ -101,19 +101,7 @@ JSCompartment::JSCompartment(JSContext* cx) : _cx(cx)
         options);
 
     if(global == nullptr) {
-        // Force GC and try again
-        fprintf(stderr, "GARBAGE COLLECTING!\n");
-        JS_GC(this->_cx);
-        global = JS_NewGlobalObject(this->_cx,
-            &global_class,
-            nullptr,
-            JS::FireOnNewGlobalHook,
-            options);
-
-        // But give up if that fails
-        if(global == nullptr) {
-            throw AtelesResourceExhaustedError("Unable to allocate new global object.");
-        }
+        throw AtelesResourceExhaustedError("Unable to allocate new global object.");
     }
 
     this->_global.init(this->_cx, global);
