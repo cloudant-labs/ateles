@@ -1,22 +1,9 @@
 let lib = {};
-const mapFuns = new Map();
+let map_funs = [];
 let results = [];
 
 function emit(key, value) {
     results.push([key, value]);
-}
-
-function setLib(source) {
-    lib = JSON.parse(source);
-}
-
-function addFun(id, source) {
-    const fun = eval(source);
-    if (typeof fun === "function") {
-        mapFuns.set(id, fun);
-    } else {
-        throw "Invalid function";
-    }
 }
 
 const mapFunRunner = (doc, mapFn) => {
@@ -45,4 +32,8 @@ function mapDoc(doc_str) {
     });
 
     return JSON.stringify(mapResults);
+}
+
+function init(lib, mapFuns) {
+
 }

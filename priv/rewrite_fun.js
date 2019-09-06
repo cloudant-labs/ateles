@@ -15,7 +15,7 @@
 //
 //  https://github.com/dmunch/couch-chakra/blob/master/js/normalizeFunction.js
 
-function rewriteAnonFun(fun) {
+function rewriteFunInt(fun) {
     const ast = esprima.parse(fun);
     let idx = ast.body.length - 1;
     let decl = {};
@@ -39,4 +39,17 @@ function rewriteAnonFun(fun) {
 
     // Generate source from the rewritten AST
     return escodegen.generate(ast);
+}
+
+
+function rewriteFun(funJSON) {
+    const fun = JSON.parse(funJSON);
+    return JSON.stringify(rewriteFun(fun));
+}
+
+function rewriteFuns(funs) {
+    const results = Array.from(funs, (fun) => {
+        return rewriteFunInt(fun);
+    });
+    return JSON.stringify(results);
 }
