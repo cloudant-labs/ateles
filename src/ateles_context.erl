@@ -10,33 +10,8 @@
 % License for the specific language governing permissions and limitations under
 % the License.
 
--module(ateles_sup).
--behaviour(supervisor).
+-module(ateles_context).
 
 
--export([
-    start_link/0
-]).
-
--export([
-    init/1
-]).
-
-
-start_link() ->
-    supervisor:start_link({local, ?MODULE}, ?MODULE, []).
-
-
-init([]) ->
-    Flags = #{
-        strategy => one_for_one,
-        intensity => 1,
-        period => 5
-    },
-    Children = [
-        #{
-            id => ateles_server,
-            start => {ateles_server, start_link, []}
-        }
-    ],
-    {ok, {Flags, Children}}.
+-callback start_link(CtxArg :: any()) -> {ok, pid()} | {error, any()}.
+-callback stop(pid()) -> ok | {error, any()}.

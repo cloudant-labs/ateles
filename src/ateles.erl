@@ -16,43 +16,61 @@
 
 
 -export([
-    create_map_context/3,
-    destroy_map_context/1,
+    rewrite/1,
+
+    acquire_map_context/1,
+    release_map_context/1,
     map_docs/2
 ]).
 
 
-create_map_context(CtxId, Lib, MapFuns) ->
-    LibJSON = jiffy:encode(Lib),
-    ateles_worker:start_link(CtxId, LibJSON, MapFuns).
+rewrite(Source) when is_binary(Source) ->
+    with_ctx("$rewrite$", {ateles_context_rewrite_fun, nil}, fun(Ctx) ->
+        ateles_context_rewrite_fun:rewrite(Ctx, Source)
+    end);
+
+rewrite(Sources) when is_list(Sources) ->
+    with_ctx("$rewrite$", {ateles_context_rewrite_fun, nil}, fun(Ctx) ->
+        ateles_context_rewrite_fun:rewrite_all(Ctx, Sources)
+    end).
 
 
-destroy_map_context(Ctx) ->
-    ateles_worker:stop(Ctx).
+acquire_map_context(CtxOpts) ->
+    #{
+        db_name := DbName,
+        sig := Sig,
+        lib := Lib,
+        map_funs := MapFuns
+    } = CtxOpts,
+    CtxId = <<DbName/binary, "-mapctx-", Sig/binary>>,
+    ateles_server:acquire_context(CtxId, {ateles_context_map, {Lib, MapFuns}}).
+
+
+release_map_context(Ctx) ->
+    ateles_server:release_context(Ctx).
 
 
 map_docs(Ctx, Docs) ->
-    ok = ateles_worker:map_start(Ctx),
+    Refs = lists:map(fun(Doc) ->
+        ateles_context_map:map_doc_async(Ctx, Doc)
+    end, Docs),
+    {ok, lists:zipwith(fun(Ref, {DocProps}) ->
+        {_, DocId} = lists:keyfind(<<"_id">>, 1, DocProps),
+        {ok, Results} = ateles_context_map:map_doc_recv(Ref),
+        Tupled = lists:map(fun(ViewResults) ->
+            lists:map(fun
+                ([K, V]) -> {K, V};
+                (Error) when is_binary(Error) -> Error
+            end, ViewResults)
+        end, Results),
+        {DocId, Tupled}
+    end, Refs, Docs)}.
+
+
+with_ctx(CtxId, CtxInfo, Fun) ->
+    {ok, Ctx} = ateles_server:acquire_context(CtxId, CtxInfo),
     try
-        Ids = lists:map(fun(Doc) ->
-            IdStr = couch_util:to_hex(crypto:strong_rand_bytes(16)),
-            Id = list_to_binary(IdStr),
-            Json = jiffy:encode(couch_doc:to_json_obj(Doc, [])),
-            ok = ateles_worker:map_doc(Ctx, Id, Json),
-            Id
-        end, Docs),
-        Results = lists:map(fun(Id) ->
-            case ateles_worker:get_result(Ctx, Id) of
-                {ok, Resp} ->
-                    jiffy:decode(Resp, [return_maps]);
-                {error, Reason} ->
-                    % log the doc id and error? blah
-                    []
-            end
-        end, Ids),
-        {ok, Results}
-    catch T:R ->
-        io:format(standard_error, "BLECH: ~p ~p~n", [T, R])
+        Fun(Ctx)
     after
-        ok = ateles_worker:map_end(Ctx)
+        ateles_server:release_context(Ctx)
     end.

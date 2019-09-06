@@ -57,64 +57,10 @@ add_custom_command(
     DEPENDS ${ATELES_PB_SRC}
 )
 
-
-# Generate our JS data files
-set(MKHEADER ${CMAKE_CURRENT_SOURCE_DIR}/tools/mkheader.py)
-set(ESCODEGEN_SRC ${CMAKE_CURRENT_SOURCE_DIR}/js/escodegen.js)
-set(ESCODEGEN_HDR ${CMAKE_CURRENT_BINARY_DIR}/escodegen.h)
-set(ESPRIMA_SRC ${CMAKE_CURRENT_SOURCE_DIR}/js/esprima.js)
-set(ESPRIMA_HDR ${CMAKE_CURRENT_BINARY_DIR}/esprima.h)
-set(REWRITE_ANON_FUN_SRC ${CMAKE_CURRENT_SOURCE_DIR}/js/rewrite_anon_fun.js)
-set(REWRITE_ANON_FUN_HDR ${CMAKE_CURRENT_BINARY_DIR}/rewrite_anon_fun.h)
-set(ATELES_MAP_SRC ${CMAKE_CURRENT_SOURCE_DIR}/js/ateles_map.js)
-set(ATELES_MAP_HDR ${CMAKE_CURRENT_BINARY_DIR}/ateles_map.h)
-set(PROTO_SRC ${CMAKE_CURRENT_SOURCE_DIR}/proto/ateles.proto)
-set(PROTO_HDR ${CMAKE_CURRENT_BINARY_DIR}/ateles_proto.h)
-
-
-add_custom_command(
-    OUTPUT ${ESCODEGEN_HDR}
-    COMMAND ${PYTHON} ${MKHEADER} ${ESCODEGEN_SRC} ${ESCODEGEN_HDR} escodegen
-    DEPENDS ${ESCODEGEN_SRC}
-)
-
-add_custom_command(
-    OUTPUT ${ESPRIMA_HDR}
-    COMMAND ${PYTHON} ${MKHEADER} ${ESPRIMA_SRC} ${ESPRIMA_HDR} esprima
-    DEPENDS ${ESPRIMA_SRC}
-)
-
-add_custom_command(
-    OUTPUT ${REWRITE_ANON_FUN_HDR}
-    COMMAND ${PYTHON}
-        ${MKHEADER}
-        ${REWRITE_ANON_FUN_SRC}
-        ${REWRITE_ANON_FUN_HDR}
-        rewrite_anon_fun
-        DEPENDS ${REWRITE_ANON_FUN_SRC}
-)
-
-add_custom_command(
-    OUTPUT ${ATELES_MAP_HDR}
-    COMMAND ${PYTHON} ${MKHEADER} ${ATELES_MAP_SRC} ${ATELES_MAP_HDR} ateles_map
-    DEPENDS ${ATELES_MAP_SRC}
-)
-
-add_custom_command(
-    OUTPUT ${PROTO_HDR}
-    COMMAND ${PYTHON} ${MKHEADER} ${PROTO_SRC} ${PROTO_HDR} ateles_proto
-    DEPENDS ${PROTO_SRC}
-)
-
 set(
     GEN_HDR_LIST
-    ${ESCODEGEN_HDR}
-    ${ESPRIMA_HDR}
-    ${REWRITE_ANON_FUN_HDR}
-    ${ATELES_MAP_HDR}
     ${PROTO_HDR}
 )
-
 
 file(GLOB SRC "c_src/*.cc")
 add_executable(ateles ${ATELES_PB} ${ATELES_GRPC} ${GEN_HDR_LIST} ${SRC})

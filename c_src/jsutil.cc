@@ -55,7 +55,7 @@ string_to_js(JSContext* cx, const std::string& s)
 std::string
 format_string(JSContext* cx, JS::HandleString str)
 {
-    std::string buf = "\"";
+    std::string buf;
 
     JS::UniqueChars chars(JS_EncodeStringToUTF8(cx, str));
     if(!chars) {
@@ -64,7 +64,6 @@ format_string(JSContext* cx, JS::HandleString str)
     }
 
     buf += chars.get();
-    buf += '"';
 
     return buf;
 }

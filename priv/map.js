@@ -1,39 +1,47 @@
 let lib = {};
 let map_funs = [];
-let results = [];
 
-function emit(key, value) {
-    results.push([key, value]);
+function init(libJSON, mapFunsJSON) {
+    try {
+        lib = JSON.parse(libJSON);
+    } catch (ex) {
+        const ret = {"error": "invalid_library", "reason": ex.toString()};
+        return JSON.stringify(ret);
+    }
+
+    try {
+        mapFuns = Array.from(JSON.parse(mapFunsJSON), (source) => {
+            return eval(source)
+        })
+    } catch (ex) {
+        const ret = {"error": "invalid_map_functions", "reason": ex.toString()};
+        return JSON.stringify(ret);
+    }
+
+    return JSON.stringify(true);
 }
 
-const mapFunRunner = (doc, mapFn) => {
+let doc_results = [];
+
+function emit(key, value) {
+    doc_results.push([key, value]);
+}
+
+function mapEach(mapFun, doc) {
     try {
-        results = [];
-        mapFn(doc);
-        return results;
+        doc_results = [];
+        mapFun(doc);
+        return doc_results;
     } catch (ex) {
-        return { error: ex.toString() };
+        return ex.toString();
     }
 };
 
-function mapDoc(doc_str) {
-    const doc = JSON.parse(doc_str);
-    const mapResults = Array.from(mapFuns, ([id, mapFun]) => {
-        const mapResult = { id };
-
-        const result = mapFunRunner(doc, mapFun);
-        if (result.error) {
-            mapResult.error = result.error;
-        } else {
-            mapResult.result = result;
-        }
-
-        return mapResult;
+function mapDoc(docJSON) {
+    const doc = JSON.parse(docJSON);
+    const mapResults = Array.from(mapFuns, (mapFun) => {
+        return mapEach(mapFun, doc);
     });
 
     return JSON.stringify(mapResults);
-}
-
-function init(lib, mapFuns) {
-
 }

@@ -44,10 +44,11 @@ function rewriteFunInt(fun) {
 
 function rewriteFun(funJSON) {
     const fun = JSON.parse(funJSON);
-    return JSON.stringify(rewriteFun(fun));
+    return JSON.stringify(rewriteFunInt(fun));
 }
 
-function rewriteFuns(funs) {
+function rewriteFuns(funsJSON) {
+    let funs = JSON.parse(funsJSON);
     const results = Array.from(funs, (fun) => {
         return rewriteFunInt(fun);
     });

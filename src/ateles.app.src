@@ -14,7 +14,8 @@
     {description, "GRPC client to work with Ateles"},
     {vsn, "0.1.0"},
     {registered, [
-        ateles_sup
+        ateles_sup,
+        ateles_server
     ]},
     {mod, {ateles_app, []}},
     {applications, [
