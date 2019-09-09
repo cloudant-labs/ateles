@@ -44,7 +44,7 @@ print_fun(JSContext* cx, unsigned argc, JS::Value* vp)
 {
     JS::CallArgs args = CallArgsFromVp(argc, vp);
 
-    for(int i = 0; i < args.length(); i++) {
+    for(unsigned i = 0; i < args.length(); i++) {
         fprintf(stderr, "> %s\n", format_value(cx, args[i]).c_str());
     }
 
