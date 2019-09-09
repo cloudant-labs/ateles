@@ -4,10 +4,11 @@
 
 ## ToDo
 
-- [ ] Add CLI options
-- [ ] Configurable number of threads via CLI option
-- [ ] Configurable `max_bytes` value from CLI option
-- [ ] Implement script timeouts via watchdog threads
+- [x] Add CLI options
+- [x] Configurable number of threads via CLI option
+- [x] Configurable `max_bytes` value from CLI option
+- [x] Configurable listen address to bind
+- [ ] Implement script timeouts via watchdog threads - see shell/js.cpp
 - [ ] Add a configure action to execute for per context timeouts
 
 

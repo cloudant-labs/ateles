@@ -27,7 +27,7 @@ class JSCx {
   public:
     typedef std::unique_ptr<JSCx> Ptr;
 
-    explicit JSCx();
+    explicit JSCx(size_t max_mem);
 
     std::unique_ptr<JSCompartment> new_compartment();
 

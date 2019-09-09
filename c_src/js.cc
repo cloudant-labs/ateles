@@ -53,9 +53,9 @@ print_fun(JSContext* cx, unsigned argc, JS::Value* vp)
 
 
 JSContext*
-create_jscontext()
+create_jscontext(size_t max_mem)
 {
-    JSContext* cx = JS_NewContext(128L * 1024 * 1024);
+    JSContext* cx = JS_NewContext(max_mem * 1024L * 1024L);
 
     if(cx == nullptr) {
         throw AtelesInternalError("Error creating JavaScript context.");
@@ -77,7 +77,7 @@ create_jscontext()
 }
 
 
-JSCx::JSCx() : _cx(create_jscontext(), JS_DestroyContext)
+JSCx::JSCx(size_t max_mem) : _cx(create_jscontext(max_mem), JS_DestroyContext)
 {
 }
 

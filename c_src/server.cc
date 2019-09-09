@@ -28,6 +28,7 @@
 #include <grpcpp/server_builder.h>
 #include <grpcpp/server_context.h>
 
+#include "cxxopts.h"
 #include "ateles.grpc.pb.h"
 #include "ateles_proto.h"
 #include "errors.h"
@@ -46,7 +47,7 @@ class Server final {
   public:
     ~Server();
 
-    void start(size_t num_threads);
+    void start(std::string address, size_t num_threads, size_t max_mem);
     //void run();
     void wait();
 
@@ -61,10 +62,10 @@ class Worker {
   public:
       typedef std::unique_ptr<Worker> Ptr;
 
-      explicit Worker(Ateles::AsyncService* service, std::unique_ptr<grpc::ServerCompletionQueue> queue, std::future<bool> go);
+      explicit Worker(Ateles::AsyncService* service, std::unique_ptr<grpc::ServerCompletionQueue> queue, std::future<bool> go, size_t max_mem);
 
   private:
-      void run(std::future<bool> go);
+      void run(std::future<bool> go, size_t max_mem);
 
       std::unique_ptr<std::thread> _thread;
       Ateles::AsyncService* _service;
@@ -151,12 +152,10 @@ Server::~Server()
 
 
 void
-Server::start(size_t num_threads)
+Server::start(std::string address, size_t num_threads, size_t max_mem)
 {
-    std::string server_address("0.0.0.0:50051");
-
     grpc::ServerBuilder builder;
-    builder.AddListeningPort(server_address, grpc::InsecureServerCredentials());
+    builder.AddListeningPort(address, grpc::InsecureServerCredentials());
     builder.RegisterService(&(this->_service));
 
     std::list<std::promise<bool>> promises;
@@ -165,24 +164,19 @@ Server::start(size_t num_threads)
         std::promise<bool> promise;
         auto f = promise.get_future();
         auto cq = builder.AddCompletionQueue();
-        auto w = std::make_unique<Worker>(&this->_service, std::move(cq), std::move(f));
+        auto w = std::make_unique<Worker>(&this->_service, std::move(cq), std::move(f), max_mem);
         promises.push_back(std::move(promise));
         this->_workers.push_back(std::move(w));
     }
 
     this->_server = builder.BuildAndStart();
-    std::cout << "Server listening on " << server_address << std::endl;
+    std::cout << "Server listening on " << address << std::endl;
 
     for(auto & promise : promises) {
         promise.set_value(true);
     }
 }
 
-// void
-// Server::run()
-// {
-//
-// }
 
 void
 Server::wait()
@@ -190,16 +184,16 @@ Server::wait()
     this->_server->Wait();
 }
 
-Worker::Worker(Ateles::AsyncService* service, std::unique_ptr<grpc::ServerCompletionQueue> queue, std::future<bool> go)
+Worker::Worker(Ateles::AsyncService* service, std::unique_ptr<grpc::ServerCompletionQueue> queue, std::future<bool> go, size_t max_mem)
     : _service(service), _queue(std::move(queue))
 {
     this->_thread =
-        std::make_unique<std::thread>(&Worker::run, this, std::move(go));
+        std::make_unique<std::thread>(&Worker::run, this, std::move(go), max_mem);
     this->_thread->detach();
 }
 
 void
-Worker::run(std::future<bool> go)
+Worker::run(std::future<bool> go, size_t max_mem)
 {
     go.wait();
     if(!go.get()) {
@@ -208,7 +202,7 @@ Worker::run(std::future<bool> go)
 
     fprintf(stderr, "Thread: %s\n", get_tid().c_str());
 
-    JSCx::Ptr cx = std::make_unique<JSCx>();
+    JSCx::Ptr cx = std::make_unique<JSCx>(max_mem);
 
     Connection::Ptr conn =
         std::make_shared<Connection>(this->_service, this->_queue.get(), cx.get());
@@ -366,7 +360,7 @@ exit_cleanly(int signum)
 
 
 int
-main(int argc, const char* argv[])
+main(int argc, char* argv[])
 {
     std::signal(SIGINT, exit_cleanly);
 
@@ -375,9 +369,53 @@ main(int argc, const char* argv[])
     JS_Init();
     JS_NewContext(8L * 1024 * 1024);
 
-    ateles::Server server;
-    server.start(5);
-    server.wait();
+    cxxopts::Options opts(argv[0], "A JavaScript engine for CouchDB\n");
+
+    // clang-format off
+    opts.add_options("", {
+        {
+            "h,help",
+            "Display this help message and exit.",
+            cxxopts::value<bool>()->default_value("false")
+        },
+        {
+            "a,address",
+            "Server ip:port to bind.",
+            cxxopts::value<std::string>()->default_value("0.0.0.0:50051")
+        },
+        {
+            "n,num_threads",
+            "Number of JavaScript threads to run.",
+            cxxopts::value<size_t>()->default_value("1")
+        },
+        {
+            "m,max_mem",
+            "Maximum number of bytes for each JavaScript thread.",
+            cxxopts::value<size_t>()->default_value("64")
+        }
+    });
+    // clang-format on
+
+    try {
+        auto cfg = opts.parse(argc, argv);
+
+        if(cfg["help"].as<bool>()) {
+            fprintf(stderr, "%s\n", opts.help().c_str());
+            exit(0);
+        }
+
+        std::string address = cfg["address"].as<std::string>();
+        size_t num_threads = cfg["num_threads"].as<size_t>();
+        size_t max_mem = cfg["max_mem"].as<size_t>();
+
+        ateles::Server server;
+        server.start(address, num_threads, max_mem);
+        server.wait();
+
+    } catch(cxxopts::OptionException& exc) {
+        fprintf(stderr, "Error: %s\n", exc.what());
+        exit(1);
+    }
 
     exit(0);
 }
