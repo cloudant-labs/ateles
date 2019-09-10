@@ -57,13 +57,8 @@ add_custom_command(
     DEPENDS ${ATELES_PB_SRC}
 )
 
-set(
-    GEN_HDR_LIST
-    ${PROTO_HDR}
-)
-
 file(GLOB SRC "c_src/*.cc")
-add_executable(ateles ${ATELES_PB} ${ATELES_GRPC} ${GEN_HDR_LIST} ${SRC})
+add_executable(ateles ${ATELES_PB} ${ATELES_GRPC} ${SRC})
 
 set(CFLAGS
     -g
@@ -88,8 +83,7 @@ set(LDFLAGS
     ${PROTOBUF_LDFLAGS}
     ${GRPC_LDFLAGS}
     ${GPR_LDFLAGS}
-    ${COVERAGE_OPTS}
-    -lgrpc++_reflection)
+    ${COVERAGE_OPTS})
 
 target_compile_options(ateles PUBLIC ${CFLAGS})
 target_include_directories(ateles PUBLIC ${INCLUDES})

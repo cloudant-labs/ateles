@@ -21,6 +21,7 @@
 #include <sstream>
 #include <string>
 #include <thread>
+#include <unistd.h>
 
 #include <grpc/grpc.h>
 #include <grpcpp/security/server_credentials.h>
@@ -30,7 +31,6 @@
 
 #include "cxxopts.h"
 #include "ateles.grpc.pb.h"
-#include "ateles_proto.h"
 #include "errors.h"
 #include "js.h"
 
@@ -200,8 +200,6 @@ Worker::run(std::future<bool> go, size_t max_mem)
         return;
     }
 
-    fprintf(stderr, "Thread: %s\n", get_tid().c_str());
-
     JSCx::Ptr cx = std::make_unique<JSCx>(max_mem);
 
     Connection::Ptr conn =
@@ -355,7 +353,27 @@ Connection::_mktask(std::function<void(Ptr)> func)
 void
 exit_cleanly(int signum)
 {
-    exit(1);
+    exit(3);
+}
+
+
+void
+parent_monitor(pid_t ppid)
+{
+    while(true) {
+        if(kill(ppid, 0) != 0) {
+            exit(4);
+        }
+        sleep(1);
+    }
+}
+
+
+void
+start_parent_monitor(int ppid)
+{
+    auto thread = std::make_unique<std::thread>(parent_monitor, ppid);
+    thread->detach();
 }
 
 
@@ -392,6 +410,11 @@ main(int argc, char* argv[])
             "m,max_mem",
             "Maximum number of bytes for each JavaScript thread.",
             cxxopts::value<size_t>()->default_value("64")
+        },
+        {
+            "p,parent_pid",
+            "Parent pid to monitor.",
+            cxxopts::value<int>()
         }
     });
     // clang-format on
@@ -408,6 +431,10 @@ main(int argc, char* argv[])
         size_t num_threads = cfg["num_threads"].as<size_t>();
         size_t max_mem = cfg["max_mem"].as<size_t>();
 
+        if(cfg.count("parent_pid")) {
+            start_parent_monitor(cfg["parent_pid"].as<int>());
+        }
+
         ateles::Server server;
         server.start(address, num_threads, max_mem);
         server.wait();
@@ -415,6 +442,9 @@ main(int argc, char* argv[])
     } catch(cxxopts::OptionException& exc) {
         fprintf(stderr, "Error: %s\n", exc.what());
         exit(1);
+    } catch(std::exception& exc) {
+        fprintf(stderr, "Error: %s\n", exc.what());
+        exit(2);
     }
 
     exit(0);

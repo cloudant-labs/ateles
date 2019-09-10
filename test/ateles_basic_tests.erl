@@ -20,6 +20,7 @@
 
 
 setup() ->
+    ateles_tutil:ensure_server(),
     {ok, Started} = application:ensure_all_started(ateles),
     Started.
 

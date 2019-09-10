@@ -71,8 +71,8 @@ acquire_context(CtxId, CtxInfo) ->
     gen_server:call(?MODULE, {acquire, CtxId, CtxInfo}).
 
 
-release_context({CtxId, _Pid}) ->
-    gen_server:call(?MODULE, {release, CtxId}).
+release_context({CtxId, Pid}) ->
+    gen_server:call(?MODULE, {release, CtxId, Pid}).
 
 
 init(_) ->
@@ -86,6 +86,13 @@ init(_) ->
 
 
 terminate(_, _St) ->
+    ets:fold(fun(Worker, _) ->
+        #worker{
+            ctx_mod = CtxMod,
+            pid = Pid
+        } = Worker,
+        CtxMod:stop(Pid)
+    end, nil, ?WORKERS),
     ok.
 
 
@@ -117,17 +124,23 @@ handle_call({acquire, CtxId, CtxInfo}, {ClientPid, _Tag}, St) ->
             {reply, Error, St}
     end;
 
-handle_call({release, CtxId}, {ClientPid, _Tag}, St) ->
+handle_call({release, CtxId, CtxPid}, {ClientPid, _Tag}, St) ->
     ?VALIDATE(release_start),
 
-    Pattern = #client{pid = ClientPid, ctx_id = CtxId, _ = '_'},
-    [Client] = ets:match_object(?CLIENTS, Pattern),
-    release(Client),
+    WorkerPattern = #worker{ctx_id = CtxId, pid = CtxPid, _ = '_'},
+    case ets:match_object(?WORKERS, WorkerPattern) of
+        [] ->
+            {reply, ok, St};
+        [_Worker] ->
+            ClientPattern = #client{pid = ClientPid, ctx_id = CtxId, _ = '_'},
+            [Client] = ets:match_object(?CLIENTS, ClientPattern),
 
-    erlang:demonitor(Client#client.ref, [flush]),
+            release(Client),
+            erlang:demonitor(Client#client.ref, [flush]),
 
-    ?VALIDATE(release_end),
-    {reply, ok, St};
+            ?VALIDATE(release_end),
+            {reply, ok, St}
+    end;
 
 handle_call(Msg, _From, St) ->
     {stop, {bad_call, Msg}, {bad_call, Msg}, St}.

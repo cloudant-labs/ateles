@@ -14,11 +14,7 @@
 
 #include <sstream>
 
-#include "ateles_map.h"
 #include "errors.h"
-#include "escodegen.h"
-#include "esprima.h"
-#include "rewrite_anon_fun.h"
 
 namespace ateles
 {
@@ -92,6 +88,7 @@ JSCx::new_compartment()
 JSCompartment::JSCompartment(JSContext* cx) : _cx(cx)
 {
     JSAutoRequest ar(this->_cx);
+
     JS::CompartmentOptions options;
 
     JSObject* global = JS_NewGlobalObject(this->_cx,
@@ -101,7 +98,19 @@ JSCompartment::JSCompartment(JSContext* cx) : _cx(cx)
         options);
 
     if(global == nullptr) {
-        throw AtelesResourceExhaustedError("Unable to allocate new global object.");
+        // Force garbage collection and retry creating
+        // the new compartment.
+        JS_GC(this->_cx);
+
+        global = JS_NewGlobalObject(this->_cx,
+            &global_class,
+            nullptr,
+            JS::FireOnNewGlobalHook,
+            options);
+
+        if(global == nullptr) {
+            throw AtelesResourceExhaustedError("Unable to allocate new global object.");
+        }
     }
 
     this->_global.init(this->_cx, global);
@@ -128,6 +137,8 @@ JSCompartment::eval(const std::string& script, std::vector<std::string>& args)
 {
     JSAutoRequest ar(this->_cx);
     JSAutoCompartment ac(this->_cx, this->_global.get());
+
+    JS_MaybeGC(this->_cx);
 
     // parse args as key=value pairs
     // for things like filename and line number
@@ -181,6 +192,8 @@ JSCompartment::call(const std::string& name, std::vector<std::string>& args)
 {
     JSAutoRequest ar(this->_cx);
     JSAutoCompartment ac(this->_cx, this->_global.get());
+
+    JS_MaybeGC(this->_cx);
 
     JS::HandleObject this_obj(this->_global);
     JS::AutoValueVector jsargs(this->_cx);

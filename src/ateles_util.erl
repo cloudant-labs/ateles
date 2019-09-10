@@ -39,7 +39,7 @@ eval(Stream, FileName, Script) ->
         ]
     },
     ok = grpcbox_client:send(Stream, Req),
-    {ok, Resp} = grpcbox_client:recv_data(Stream),
+    {ok, Resp} = grpcbox_client:recv_data(Stream, 1000),
     case Resp of
         #{status := 0, result := Result} ->
             {ok, Result};
@@ -55,7 +55,7 @@ call(Stream, Function, Args) ->
         args => lists:map(fun jiffy:encode/1, Args)
     },
     ok = grpcbox_client:send(Stream, Req),
-    {ok, Resp} = grpcbox_client:recv_data(Stream),
+    {ok, Resp} = grpcbox_client:recv_data(Stream, 1000),
     case Resp of
         #{status := 0, result := Result} ->
             {ok, jiffy:decode(Result)};
