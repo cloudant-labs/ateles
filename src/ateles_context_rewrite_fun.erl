@@ -40,7 +40,7 @@ start_link(_) ->
 
 
 stop(Pid) ->
-    {ok, Resp} = gen:call(Pid, stop),
+    {ok, Resp} = gen:call(Pid, call, stop),
     Resp.
 
 

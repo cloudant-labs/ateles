@@ -32,8 +32,8 @@ start_link({Lib, MapFuns}) ->
     proc_lib:start_link(?MODULE, init, [Lib, MapFuns]).
 
 
-stop(Ctx) ->
-    {ok, Resp} = gen:call(Ctx, call, stop),
+stop(Pid) ->
+    {ok, Resp} = gen:call(Pid, call, stop),
     Resp.
 
 
