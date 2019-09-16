@@ -12,7 +12,7 @@
 
 .PHONY: all format init build test coverage clean
 
-all: deps
+all: deps server
 	@rebar compile
 
 
@@ -28,7 +28,7 @@ init:
 	@test -f _build/CMakeCache.txt || (mkdir -p _build && cmake -S . -B _build)
 
 
-compile: init
+server: init
 	@make -C _build
 	@mkdir -p priv/
 	@cp _build/ateles priv/ateles
