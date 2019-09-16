@@ -21,6 +21,8 @@
     {applications, [
         kernel,
         stdlib,
+        couch,
+        couch_eval,
         grpcbox,
         ctx
     ]},

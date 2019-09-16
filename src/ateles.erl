@@ -15,6 +15,9 @@
 -behavior(couch_eval_impl).
 
 
+-include_lib("couch/include/couch_db.hrl").
+
+
 -export([
     rewrite/1,
 
@@ -52,10 +55,10 @@ release_map_context(Ctx) ->
 
 map_docs(Ctx, Docs) ->
     Refs = lists:map(fun(Doc) ->
-        ateles_context_map:map_doc_async(Ctx, Doc)
+        Json = couch_doc:to_json_obj(Doc, []),
+        ateles_context_map:map_doc_async(Ctx, Json)
     end, Docs),
-    {ok, lists:zipwith(fun(Ref, {DocProps}) ->
-        {_, DocId} = lists:keyfind(<<"_id">>, 1, DocProps),
+    {ok, lists:zipwith(fun(Ref, #doc{id = DocId}) ->
         {ok, Results} = ateles_context_map:map_doc_recv(Ref),
         Tupled = lists:map(fun(ViewResults) ->
             lists:map(fun
