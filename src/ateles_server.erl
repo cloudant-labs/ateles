@@ -86,7 +86,7 @@ init(_) ->
 
 
 terminate(_, _St) ->
-    ets:fold(fun(Worker, _) ->
+    ets:foldl(fun(Worker, _) ->
         #worker{
             ctx_mod = CtxMod,
             pid = Pid
