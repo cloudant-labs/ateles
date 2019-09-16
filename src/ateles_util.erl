@@ -25,7 +25,9 @@
 
     gen_call_async/2,
     gen_recv_async/1,
-    gen_recv_async/2
+    gen_recv_async/2,
+
+    ensure_server/0
 ]).
 
 
@@ -144,3 +146,49 @@ gen_recv_async(Ref, Timeout) ->
         erlang:demonitor(Ref, [flush]),
         exit(timeout)
     end.
+
+
+ensure_server() ->
+    case application:get_env(ateles, server) of
+        undefined ->
+            Pid = spawn(fun() -> run_server() end),
+            application:set_env(ateles, server, Pid);
+        _ ->
+            ok
+    end.
+
+
+run_server() ->
+    PrivDir = case code:priv_dir(?MODULE) of
+        {error, _} ->
+            EbinDir = filename:dirname(code:which(?MODULE)),
+            AppPath = filename:dirname(EbinDir),
+            filename:join(AppPath, "priv");
+        Path ->
+            Path
+    end,
+    Host = config:get("ateles", "service_url", "localhost"),
+    Port = config:get("atelese", "service_port", "8444"),
+    Address = list_to_binary(Host ++ ":" ++ Port),
+    Command = filename:join(PrivDir, "ateles"),
+    Args = [
+        exit_status,
+        {line, 1024},
+        {args, [
+            <<"-a">>, Address,
+            <<"-n">>, <<"2">>,
+            <<"-p">>, list_to_binary(os:getpid())
+        ]
+    }],
+    ServerPort = erlang:open_port({spawn_executable, Command}, Args),
+    server_loop(ServerPort).
+
+
+server_loop(Port) ->
+    receive
+        {Port, {data, _}} ->
+            server_loop(Port);
+        Error ->
+            io:format(standard_error, "SERVER ERROR: ~p~n", [Error])
+    end.
+

@@ -19,25 +19,13 @@
 -define(TDEF(A), {atom_to_list(A), fun A/0}).
 
 
-setup() ->
-    ateles_tutil:ensure_server(),
-    {ok, Started} = application:ensure_all_started(ateles),
-    Started.
-
-
-teardown(Apps) ->
-    lists:foreach(fun(App) ->
-        ok = application:stop(App)
-    end, lists:reverse(Apps)).
-
-
 basic_test_() ->
     {
         "Basic tests",
         {
             setup,
-            fun setup/0,
-            fun teardown/1,
+            fun() -> test_util:start_couch([ateles]) end,
+            fun test_util:stop_couch/1,
             [
                 ?TDEF(eval_code),
                 ?TDEF(call_function)

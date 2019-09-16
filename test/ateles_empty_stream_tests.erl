@@ -19,25 +19,13 @@
 -define(TDEF(A), {atom_to_list(A), fun A/0}).
 
 
-setup() ->
-    ateles_tutil:ensure_server(),
-    {ok, Started} = application:ensure_all_started(ateles),
-    Started.
-
-
-teardown(Apps) ->
-    lists:foreach(fun(App) ->
-        ok = application:stop(App)
-    end, lists:reverse(Apps)).
-
-
 empty_streams_test_() ->
     {
         "Test basic ateles operations",
         {
             setup,
-            fun setup/0,
-            fun teardown/1,
+            fun() -> test_util:start_couch([ateles]) end,
+            fun test_util:stop_couch/1,
             [
                 ?TDEF(open_close_stream),
                 ?TDEF(open_close_lots_of_streams),

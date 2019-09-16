@@ -22,7 +22,15 @@
 
 start(_, _) ->
     {ok, _} = application:ensure_all_started(grpcbox),
-    Endpoints = [{http, "127.0.0.1", 50051, []}],
+    case application:get_env(fabric, eunit_run) of
+        {ok, true} ->
+            ateles_util:ensure_server();
+        _ ->
+            ok
+    end,
+    Host = config:get("ateles", "service_url", "localhost"),
+    Port = config:get_integer("ateles", "service_port", 8444),
+    Endpoints = [{http, Host, Port, []}],
     {ok, Pid} = grpcbox_channel_sup:start_child(ateles, Endpoints, #{}),
     ok = application:set_env(ateles, channel_pid, Pid),
     ateles_sup:start_link().

@@ -13,22 +13,11 @@
 -module(ateles_map_doc_tests).
 
 
+-include_lib("couch/include/couch_db.hrl").
 -include_lib("eunit/include/eunit.hrl").
 
 
 -define(TDEF(A), {atom_to_list(A), fun A/0}).
-
-
-setup() ->
-    ateles_tutil:ensure_server(),
-    {ok, Started} = application:ensure_all_started(ateles),
-    Started.
-
-
-teardown(Apps) ->
-    lists:foreach(fun(App) ->
-        ok = application:stop(App)
-    end, lists:reverse(Apps)).
 
 
 map_doc_test_() ->
@@ -36,8 +25,8 @@ map_doc_test_() ->
         "Map doc tests",
         {
             setup,
-            fun setup/0,
-            fun teardown/1,
+            fun() -> test_util:start_couch([ateles]) end,
+            fun test_util:stop_couch/1,
             [
                 ?TDEF(map_single_doc)
             ]
@@ -47,7 +36,7 @@ map_doc_test_() ->
 
 map_single_doc() ->
     {ok, Ctx} = ateles:acquire_map_context(single_fun_opts()),
-    {ok, Results} = ateles:map_docs(Ctx, [{[{<<"_id">>, <<"foo">>}]}]),
+    {ok, Results} = ateles:map_docs(Ctx, [#doc{id = <<"foo">>}]),
     ?assertEqual([{<<"foo">>, [[{<<"foo">>, null}]]}], Results).
 
 

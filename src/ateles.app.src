@@ -21,6 +21,7 @@
     {applications, [
         kernel,
         stdlib,
+        config,
         couch,
         couch_eval,
         grpcbox,
