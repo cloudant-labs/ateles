@@ -13,6 +13,7 @@
 #ifndef ATELES_JS_H
 #define ATELES_JS_H
 
+#include <vector>
 #include <future>
 
 #include "js/Initialization.h"
