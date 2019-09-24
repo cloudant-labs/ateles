@@ -54,4 +54,4 @@ coverage:
 
 
 clean:
-	rm -rf build
+	rm -rf _build
