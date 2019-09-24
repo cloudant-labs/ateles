@@ -25,7 +25,7 @@ format:
 
 
 init:
-	@test -f _build/CMakeCache.txt || (mkdir -p _build && cmake -S . -B _build)
+	@test -f _build/CMakeCache.txt || (mkdir -p _build && cd _build && cmake ../)
 
 
 server: init
