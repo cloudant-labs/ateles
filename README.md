@@ -1,13 +1,80 @@
-# ateles-erlang
- JS worker runtime erlang bindings
+Ateles - gRPC interface to SpiderMonkey
+===
 
+This project provides a gRPC interface to SpiderMonkey and includes Erlang
+bindings for that interface.
+
+Required Dependencies
+---
+
+For macOS:
+
+```shell
+$ brew install grpc yasm autoconf@2.13
+$ mkdir -p ~/tmp/spidermonkey && cd ~/tmp/spidermonkey
+$ wget http://ftp.mozilla.org/pub/firefox/releases/60.3.0esr/source/firefox-60.3.0esr.source.tar.xz
+$ tar -xf firefox-60.3.0esr.source.tar.xz
+$ cd firefox-60.3.0/js/src
+$ mkdir obj
+$ cd obj
+$ ../configure \
+    --disable-ctypes \
+    --disable-ion \
+    --disable-jemalloc \
+    --enable-optimize \
+    --enable-posix-nspr-emulation \
+    --enable-hardening \
+    --with-system-zlib \
+    --with-intl-api
+$ make -j4
+$ make install
+```
+
+For Debian
+
+```shell
+$ wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key| apt-key add -
+$ echo "deb http://deb.debian.org/debian stretch-backports main" > /etc/apt/sources.list.d/backports.list
+$ apt-get update
+$ apt-get install -y -t stretch-backports libgrpc++-dev libgrpc++1 libgrpc6 libgrpc-dev protobuf-compiler-grpc
+$ apt-get install -y autoconf2.13
+$ apt-get install -y yasm
+$ mkdir -p ~/tmp/spidermonkey && cd ~/tmp/spidermonkey
+$ wget http://ftp.mozilla.org/pub/firefox/releases/60.3.0esr/source/firefox-60.3.0esr.source.tar.xz
+$ tar -xf firefox-60.3.0esr.source.tar.xz
+$ cd firefox-60.3.0/js/src
+$ mkdir obj
+$ cd obj
+$ ../configure \
+    --disable-ctypes \
+    --disable-ion \
+    --disable-jemalloc \
+    --enable-optimize \
+    --enable-posix-nspr-emulation \
+    --enable-hardening \
+    --with-system-zlib \
+    --with-intl-api
+$ make -j4
+$ make install
+```
+
+
+Building
+---
+
+```shell
+$ make
+```
+
+
+Testing
+---
+```shell
+$ make check
+```
 
 ## ToDo
 
-- [x] Add CLI options
-- [x] Configurable number of threads via CLI option
-- [x] Configurable `max_bytes` value from CLI option
-- [x] Configurable listen address to bind
 - [ ] Implement script timeouts via watchdog threads - see shell/js.cpp
 - [ ] Add a configure action to execute for per context timeouts
 
