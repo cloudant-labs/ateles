@@ -17,7 +17,7 @@ $ tar -xf firefox-60.3.0esr.source.tar.xz
 $ cd firefox-60.3.0/js/src
 $ mkdir obj
 $ cd obj
-$ ../configure \
+$ CXXFLAGS=-stdlib=libc++ ../configure \
     --disable-ctypes \
     --disable-ion \
     --disable-jemalloc \
