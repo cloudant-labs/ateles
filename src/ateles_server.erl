@@ -102,7 +102,7 @@ handle_call({acquire, CtxId, CtxInfo}, {ClientPid, _Tag}, St) ->
         {ok, Pid} ->
             ets:update_counter(?WORKERS, CtxId, {#worker.ref_count, 1}),
             Pattern = #client{pid = ClientPid, ctx_id = CtxId, _ = '_'},
-            Client0 = case ets:lookup(?CLIENTS, Pattern) of
+            Client0 = case ets:match_object(?CLIENTS, Pattern) of
                 [] ->
                     #client{
                         pid = ClientPid,
@@ -111,6 +111,7 @@ handle_call({acquire, CtxId, CtxInfo}, {ClientPid, _Tag}, St) ->
                         ref_count = 0
                     };
                 [C] ->
+                    ets:delete_object(?CLIENTS, C),
                     C
             end,
             Client1 = Client0#client{
@@ -135,7 +136,7 @@ handle_call({release, CtxId, CtxPid}, {ClientPid, _Tag}, St) ->
             ClientPattern = #client{pid = ClientPid, ctx_id = CtxId, _ = '_'},
             [Client] = ets:match_object(?CLIENTS, ClientPattern),
 
-            release(Client),
+            release(Client, 1),
             erlang:demonitor(Client#client.ref, [flush]),
 
             ?VALIDATE(release_end),
@@ -185,7 +186,7 @@ handle_info({'DOWN', _Ref, process, ClientPid, _Reason}, St) ->
 
     Pattern = #client{pid = ClientPid, _ = '_'},
     lists:foreach(fun(Client) ->
-        release(Client),
+        release(Client, Client#client.ref_count),
         erlang:demonitor(Client#client.ref, [flush])
     end, ets:match_object(?CLIENTS, Pattern)),
 
@@ -230,13 +231,17 @@ acquire(CtxId, {CtxMod, CtxArg}, #{max_workers := MaxWorkers} = St) ->
     end.
 
 
-release(#client{} = Client) ->
+release(#client{} = Client, Decrement) ->
     #client{
         ctx_id = CtxId,
         ref_count = RefCount
     } = Client,
-    CtxRC = ets:update_counter(?WORKERS, CtxId, {#worker.ref_count, -1 * RefCount}),
+    CtxRC = ets:update_counter(?WORKERS, CtxId, {#worker.ref_count, -1 * Decrement}),
     true = ets:delete_object(?CLIENTS, Client),
+
+    if RefCount == Decrement -> ok; true ->
+        ets:insert(?CLIENTS, Client#client{ref_count = RefCount - Decrement})
+    end,
 
     % Blow up if we find an invalid ref count
     if CtxRC >= 0 -> ok; true ->
