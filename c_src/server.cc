@@ -291,8 +291,10 @@ Connection::handle_request()
     try {
         std::string result;
         if(this->_req.action() == JSRequest_Action_EVAL) {
+            std::cout << "Processing eval request ... " << std::endl;
             result = this->_compartment->eval(this->_req.script(), args);
         } else {
+            std::cout << "Processing call request ... " << std::endl;
             result = this->_compartment->call(this->_req.script(), args);
         }
         this->_resp.set_result(result);
