@@ -49,40 +49,48 @@ map_doc_recv(Ref) ->
 init(Lib, MapFuns0) ->
     proc_lib:init_ack({ok, self()}),
     {ok, MapFuns1} = ateles:rewrite(MapFuns0),
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    {ok, _} = ateles_util:eval_file(Stream, "map.js"),
-    {ok, true} = ateles_util:call(Stream, <<"init">>, [Lib, MapFuns1]),
-    loop(Stream, queue:new()).
+    Args = [Lib, MapFuns1],
+    loop(new_stream(Args), Args, queue:new()).
 
 
-loop(Stream, Queue) ->
+loop(Stream, Args, Queue) ->
     receive
         {call, From, {map_doc, Doc}} ->
             ok = ateles_util:call_async(Stream, <<"mapDoc">>, [Doc]),
-            loop(Stream, queue:in(From, Queue));
+            loop(Stream, Args, queue:in(From, Queue));
         {call, From, stop} ->
-            drain_queue(Queue),
+            drain_queue(Queue, closing),
             gen:reply(From, ok),
             grpcbox_client:close_and_recv(Stream);
         GrpcMsg ->
             case ateles_util:handle_async_resp(Stream, GrpcMsg) of
                 skip ->
-                    loop(Stream, Queue);
+                    loop(Stream, Args, Queue);
+                stream_finished ->
+                    drain_queue(Queue, retry),
+                    loop(new_stream(Args), Args, queue:new());
                 {exit, Reason} ->
                     exit(Reason);
                 Resp ->
                     {{value, From}, RestQueue} = queue:out(Queue),
                     gen:reply(From, Resp),
-                    loop(Stream, RestQueue)
+                    loop(Stream, Args, RestQueue)
             end
     end.
 
 
-drain_queue(Queue) ->
+new_stream(Args) ->
+    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
+    {ok, _} = ateles_util:eval_file(Stream, "map.js"),
+    {ok, true} = ateles_util:call(Stream, <<"init">>, Args),
+    Stream.
+
+
+drain_queue(Queue, Msg) ->
     case queue:out(Queue) of
         {{value, From}, RestQueue} ->
-            gen:reply(From, closing),
-            drain_queue(RestQueue);
+            gen:reply(From, Msg),
+            drain_queue(RestQueue, Msg);
         {empty, _} ->
             ok
     end.

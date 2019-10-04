@@ -35,6 +35,9 @@
 ]).
 
 
+-define(RETRIES, 5).
+
+
 start_link(_) ->
     proc_lib:start_link(?MODULE, init, []).
 
@@ -56,24 +59,37 @@ rewrite_all({_CtxId, Pid}, Sources) when is_list(Sources) ->
 
 init() ->
     proc_lib:init_ack({ok, self()}),
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    lists:foreach(fun(FileName) ->
-        {ok, _} = ateles_util:eval_file(Stream, FileName)
-    end, ?SOURCE_FILES),
-    loop(Stream).
+    loop(new_stream()).
 
 
 loop(Stream) ->
     receive
         {call, From, {rewrite, Source}} ->
-            Resp = ateles_util:call(Stream, <<"rewriteFun">>, [Source]),
-            gen:reply(From, Resp),
-            loop(Stream);
+            do_call(Stream, From, <<"rewriteFun">>, [Source], ?RETRIES);
         {call, From, {rewrite_all, Sources}} ->
-            Resp = ateles_util:call(Stream, <<"rewriteFuns">>, [Sources]),
-            gen:reply(From, Resp),
-            loop(Stream);
+            do_call(Stream, From, <<"rewriteFuns">>, [Sources], ?RETRIES);
         {call, From, stop} ->
             gen:reply(From, ok),
             grpcbox_client:close_and_recv(Stream)
     end.
+
+
+new_stream() ->
+    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
+    lists:foreach(fun(FileName) ->
+        {ok, _} = ateles_util:eval_file(Stream, FileName)
+    end, ?SOURCE_FILES),
+    Stream.
+
+
+do_call(_Stream, _From, _Fun, _Args, Retries) when Retries =< 0 ->
+    erlang:error({failed_rewrite, retries_exhausted});
+
+do_call(Stream, From, Fun, Args, Retries) when Retries > 0 ->
+    case ateles_util:call(Stream, Fun, Args) of
+        stream_finished ->
+            do_call(new_stream(), From, Fun, Args, Retries - 1);
+        Resp ->
+            gen:reply(From, Resp)
+    end,
+    loop(Stream).

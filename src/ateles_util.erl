@@ -57,12 +57,13 @@ call(Stream, Function, Args) ->
         args => lists:map(fun jiffy:encode/1, Args)
     },
     ok = grpcbox_client:send(Stream, Req),
-    {ok, Resp} = grpcbox_client:recv_data(Stream, 1000),
-    case Resp of
-        #{status := 0, result := Result} ->
+    case grpcbox_client:recv_data(Stream, 1000) of
+        {ok, #{status := 0, result := Result}} ->
             {ok, jiffy:decode(Result)};
-        #{status := Error, result := Reason} ->
-            {error, {Error, Reason}}
+        {ok, #{status := Error, result := Reason}} ->
+            {error, {Error, Reason}};
+        stream_finished ->
+            stream_finished
     end.
 
 
@@ -91,14 +92,17 @@ handle_async_resp(Stream, Msg) ->
                 #{status := Error, result := Reason} ->
                     {error, {Error, Reason}}
             end;
+        {eos, Id} ->
+            erlang:demonitor(Ref, [flush]),
+            stream_finished;
         {'DOWN', Ref, process, Pid, _Reason} ->
             case grpcbox_client:recv_trailers(Stream, 0) of
                 {ok, {<<"0">> = _Status, _Message, _Metadata}} ->
-                    {exit, stream_finished};
+                    stream_finished;
                 {ok, {Status, Message, _Metadata}} ->
                     {exit, {Status, Message}};
                 timeout ->
-                    {exit, stream_finished}
+                    stream_finished
             end;
         BadMsg ->
             {exit, {invalid_msg, BadMsg}}
