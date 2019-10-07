@@ -191,7 +191,7 @@ handle_info({'DOWN', _Ref, process, ClientPid, _Reason}, St) ->
     end, ets:match_object(?CLIENTS, Pattern)),
 
     ?VALIDATE(client_down_end),
-    {reply, ok, St};
+    {noreply, St};
 
 handle_info(Msg, St) ->
     {stop, {bad_info, Msg}, St}.
