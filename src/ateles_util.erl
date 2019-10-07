@@ -95,6 +95,15 @@ handle_async_resp(Stream, Msg) ->
         {eos, Id} ->
             erlang:demonitor(Ref, [flush]),
             stream_finished;
+        {eos, _DifferentId} ->
+            % Message from a previous stream
+            skip;
+        {'END_STREAM', Id} ->
+            erlang:demonitor(Ref, [flush]),
+            stream_finished;
+        {'END_STREAM', _DifferentId} ->
+            % Message from a previous stream
+            skip;
         {'DOWN', Ref, process, Pid, _Reason} ->
             case grpcbox_client:recv_trailers(Stream, 0) of
                 {ok, {<<"0">> = _Status, _Message, _Metadata}} ->
@@ -104,6 +113,9 @@ handle_async_resp(Stream, Msg) ->
                 timeout ->
                     stream_finished
             end;
+        {'DOWN', _DifferentRef, process, _DifferentPid, _Reason} ->
+            % Message from a previous stream
+            skip;
         BadMsg ->
             {exit, {invalid_msg, BadMsg}}
     end.
