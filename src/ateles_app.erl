@@ -62,7 +62,7 @@ discover_endpoints() ->
     case inet_res:getbyname(DNSName, srv) of
         {ok, #hostent{h_addr_list = AddrList}} ->
             lists:map(fun({_Priority, _Weight, Port, Host}) ->
-                [{http, Host, Port, []}]
+                {http, Host, Port, []}
             end, AddrList);
         {error, Reason} ->
             erlang:error({service_lookup_failed, Reason})
