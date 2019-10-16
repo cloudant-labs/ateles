@@ -37,6 +37,9 @@ set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/proto)
 set(ATELES_PB_SRC ${PROTO_DIR}/ateles.proto)
 set(ATELES_PB ${CMAKE_CURRENT_BINARY_DIR}/ateles.pb.cc)
 set(ATELES_GRPC ${CMAKE_CURRENT_BINARY_DIR}/ateles.grpc.pb.cc)
+set(HEALTH_PB_SRC ${PROTO_DIR}/health.proto)
+set(HEALTH_PB ${CMAKE_CURRENT_BINARY_DIR}/health.pb.cc)
+set(HEALTH_GRPC ${CMAKE_CURRENT_BINARY_DIR}/health.grpc.pb.cc)
 
 add_custom_command (
     OUTPUT ${ATELES_PB}
@@ -57,8 +60,33 @@ add_custom_command(
     DEPENDS ${ATELES_PB_SRC}
 )
 
+add_custom_command (
+    OUTPUT ${HEALTH_PB}
+    COMMAND ${PROTOC}
+        -I ${PROTO_DIR}
+        --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
+        health.proto
+    DEPENDS ${HEALTH_PB_SRC}
+)
+
+add_custom_command(
+    OUTPUT ${HEALTH_GRPC}
+    COMMAND ${PROTOC}
+        -I ${PROTO_DIR}
+        --grpc_out=${CMAKE_CURRENT_BINARY_DIR}
+        --plugin=protoc-gen-grpc=${GRPC_PLUGIN}
+        health.proto
+    DEPENDS ${HEALTH_PB_SRC}
+)
+
 file(GLOB SRC "c_src/*.cc")
-add_executable(ateles ${ATELES_PB} ${ATELES_GRPC} ${SRC})
+add_executable(
+    ateles
+    ${ATELES_PB}
+    ${ATELES_GRPC}
+    ${HEALTH_PB}
+    ${HEALTH_GRPC}
+    ${SRC})
 
 set(CFLAGS
     -g

@@ -31,8 +31,12 @@
 
 #include "cxxopts.h"
 #include "ateles.grpc.pb.h"
+#include "health.grpc.pb.h"
 #include "errors.h"
 #include "js.h"
+
+
+namespace health = grpc::health::v1;
 
 
 namespace ateles
@@ -41,6 +45,17 @@ namespace ateles
 
 class Worker;
 class Task;
+
+class HealthServiceImpl final : public health::Health::Service {
+
+    grpc::Status Check(
+            grpc::ServerContext* context,
+            const health::HealthCheckRequest* request,
+            health::HealthCheckResponse* response) override {
+        response->set_status(health::HealthCheckResponse::SERVING);
+        return grpc::Status::OK;
+    }
+};
 
 
 class Server final {
@@ -54,6 +69,7 @@ class Server final {
   private:
     std::unique_ptr<grpc::Server> _server;
     Ateles::AsyncService _service;
+    HealthServiceImpl _health;
     std::list<std::unique_ptr<Worker>> _workers;
 };
 
@@ -157,6 +173,7 @@ Server::start(std::string address, size_t num_threads, size_t max_mem)
     grpc::ServerBuilder builder;
     builder.AddListeningPort(address, grpc::InsecureServerCredentials());
     builder.RegisterService(&(this->_service));
+    builder.RegisterService(&(this->_health));
 
     std::list<std::promise<bool>> promises;
 
