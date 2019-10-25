@@ -29,8 +29,8 @@
 
 
 -define(SOURCE_FILES, [
-    "esprima.js",
-    "escodegen.js",
+    %"esprima.js",
+    %"escodegen.js",
     "rewrite_fun.js"
 ]).
 
