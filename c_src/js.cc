@@ -16,8 +16,8 @@
 
 #include "errors.h"
 
-#define ACTIVE_SLEEP_TIME 100000 // 100,000 us = 100ms = 0.1s
-#define MAX_SLEEP_TIME INT_MAX // A really long time
+#define ACTIVE_SLEEP_TIME_MSEC 100 // 100ms = 0.1s
+#define MAX_SLEEP_TIME_MSEC INT_MAX // A really long time ~25 days
 
 namespace ateles
 {
@@ -36,6 +36,15 @@ static JSClassOps global_ops = {nullptr,
 
 /* The class of the global object. */
 static JSClass global_class = {"global", JSCLASS_GLOBAL_FLAGS, &global_ops};
+
+
+std::chrono::system_clock::duration
+wait_time(int msec_wait)
+{
+    auto sec_wait = double(msec_wait) / 1000.0;
+    return std::chrono::duration_cast<std::chrono::system_clock::duration>
+            (std::chrono::duration<double>(sec_wait));
+}
 
 
 static bool
@@ -118,9 +127,7 @@ JSCx::new_compartment()
 void
 JSCx::set_timeout(int ms_timeout)
 {
-    int us_timeout = ms_timeout * 1000;
-    auto now = std::chrono::system_clock::now();
-    this->_deadline = now + std::chrono::system_clock::duration(us_timeout);
+    this->_deadline = std::chrono::system_clock::now() + wait_time(ms_timeout);
     this->_timed_out = false;
 }
 
@@ -162,9 +169,9 @@ JSCx::wd_run()
         JS_RequestInterruptCallback(this->_cx.get());
 
         if(this->_wd_active) {
-            sleep_time = std::chrono::system_clock::duration(ACTIVE_SLEEP_TIME);
+            sleep_time = wait_time(ACTIVE_SLEEP_TIME_MSEC);
         } else {
-            sleep_time = std::chrono::system_clock::duration(MAX_SLEEP_TIME);
+            sleep_time = wait_time(MAX_SLEEP_TIME_MSEC);
         }
 
         this->_wd_cv.wait_for(guard, sleep_time);

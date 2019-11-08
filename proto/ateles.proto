@@ -25,6 +25,7 @@ message JSRequest {
     Action action = 1;
     string script = 2;
     repeated string args = 3;
+    int32 timeout = 4;
 }
 
 

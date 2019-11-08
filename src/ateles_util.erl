@@ -16,8 +16,11 @@
 
 -export([
     eval/3,
+    eval/4,
     call/3,
+    call/4,
     call_async/3,
+    call_async/4,
     handle_async_resp/2,
 
     eval_file/2,
@@ -32,13 +35,18 @@
 
 
 eval(Stream, FileName, Script) ->
+    eval(Stream, FileName, Script, 5000).
+
+
+eval(Stream, FileName, Script, Timeout) ->
     Req = #{
         action => 0,
         script => Script,
         args => [
             list_to_binary("file=" ++ FileName),
             <<"line=1">>
-        ]
+        ],
+        timeout => Timeout
     },
     ok = grpcbox_client:send(Stream, Req),
     {ok, Resp} = grpcbox_client:recv_data(Stream, infinity),
@@ -51,10 +59,15 @@ eval(Stream, FileName, Script) ->
 
 
 call(Stream, Function, Args) ->
+    call(Stream, Function, Args, 5000).
+
+
+call(Stream, Function, Args, Timeout) ->
     Req = #{
         action => 1,
         script => Function,
-        args => lists:map(fun jiffy:encode/1, Args)
+        args => lists:map(fun jiffy:encode/1, Args),
+        timeout => Timeout
     },
     ok = grpcbox_client:send(Stream, Req),
     case grpcbox_client:recv_data(Stream, infinity) of
@@ -68,10 +81,15 @@ call(Stream, Function, Args) ->
 
 
 call_async(Stream, Function, Args) ->
+    call_async(Stream, Function, Args, 5000).
+
+
+call_async(Stream, Function, Args, Timeout) ->
     Req = #{
         action => 1,
         script => Function,
-        args => lists:map(fun jiffy:encode/1, Args)
+        args => lists:map(fun jiffy:encode/1, Args),
+        timeout => Timeout
     },
     ok = grpcbox_client:send(Stream, Req).
 
