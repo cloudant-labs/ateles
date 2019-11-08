@@ -16,6 +16,9 @@
 
 #include "errors.h"
 
+#define ACTIVE_SLEEP_TIME 100000 // 100,000 us = 100ms = 0.1s
+#define MAX_SLEEP_TIME INT_MAX // A really long time
+
 namespace ateles
 {
 static JSClassOps global_ops = {nullptr,
@@ -73,19 +76,116 @@ create_jscontext(size_t max_mem)
 }
 
 
-JSCx::JSCx(size_t max_mem) : _cx(create_jscontext(max_mem), JS_DestroyContext)
+bool
+check_timeout_shim(JSContext* jscx)
 {
+    JSCx* cx = (JSCx*) JS_GetContextPrivate(jscx);
+    return cx->check_timeout();
+}
+
+
+JSCx::JSCx(size_t max_mem) : _cx(create_jscontext(max_mem), JS_DestroyContext),
+        _wd_alive(true), _wd_active(false)
+{
+    JS_SetContextPrivate(this->_cx.get(), this);
+    JS_AddInterruptCallback(this->_cx.get(), &check_timeout_shim);
+
+    this->_wd_alive = true;
+    this->_wd_active = false;
+    this->_wd_thread = std::make_unique<std::thread>(&JSCx::wd_run, this);
+}
+
+
+JSCx::~JSCx()
+{
+    // Scope the lock acquisition
+    {
+        std::unique_lock<std::mutex> guard(this->_wd_lock);
+        this->_wd_alive = false;
+        this->_wd_cv.notify_one();
+    }
+    this->_wd_thread->join();
 }
 
 
 std::unique_ptr<JSCompartment>
 JSCx::new_compartment()
 {
-    return std::make_unique<JSCompartment>(this->_cx.get());
+    return std::make_unique<JSCompartment>(this, this->_cx.get());
 }
 
 
-JSCompartment::JSCompartment(JSContext* cx) : _cx(cx)
+void
+JSCx::set_timeout(int ms_timeout)
+{
+    int us_timeout = ms_timeout * 1000;
+    auto now = std::chrono::system_clock::now();
+    this->_deadline = now + std::chrono::system_clock::duration(us_timeout);
+    this->_timed_out = false;
+}
+
+
+bool
+JSCx::check_timeout()
+{
+    if(std::chrono::system_clock::now() > this->_deadline) {
+        this->_timed_out = true;
+        return false;
+    }
+
+    return true;
+}
+
+
+bool
+JSCx::timed_out()
+{
+    return this->_timed_out;
+}
+
+
+void
+JSCx::set_watchdog_status(bool status)
+{
+    std::unique_lock<std::mutex> guard(this->_wd_lock);
+    this->_wd_active = status;
+    this->_wd_cv.notify_one();
+}
+
+
+void
+JSCx::wd_run()
+{
+    std::unique_lock<std::mutex> guard(this->_wd_lock);
+    std::chrono::system_clock::duration sleep_time;
+    while(this->_wd_alive) {
+        JS_RequestInterruptCallback(this->_cx.get());
+
+        if(this->_wd_active) {
+            sleep_time = std::chrono::system_clock::duration(ACTIVE_SLEEP_TIME);
+        } else {
+            sleep_time = std::chrono::system_clock::duration(MAX_SLEEP_TIME);
+        }
+
+        this->_wd_cv.wait_for(guard, sleep_time);
+    }
+}
+
+
+JSCxAutoTimeout::JSCxAutoTimeout(JSCx* cx, int ms_timeout) : _cx(cx)
+{
+    this->_cx->set_timeout(ms_timeout);
+    this->_cx->set_watchdog_status(true);
+}
+
+
+JSCxAutoTimeout::~JSCxAutoTimeout()
+{
+    this->_cx->set_watchdog_status(false);
+}
+
+
+JSCompartment::JSCompartment(JSCx* jscx, JSContext* cx) : _jscx(jscx), _cx(cx)
 {
     JSAutoRequest ar(this->_cx);
 
@@ -174,8 +274,13 @@ JSCompartment::eval(const std::string& script, std::vector<std::string>& args)
     if(!JS::Evaluate(this->_cx, opts, script.c_str(), script.size(), &rval)) {
         JS::RootedValue exc(this->_cx);
         if(!JS_GetPendingException(this->_cx, &exc)) {
-            throw AtelesInternalError(
-                "Unknown error evaluating script: " + file);
+            if(this->_jscx->timed_out()) {
+                throw AtelesTimeoutError(
+                    "Time out evaluating script: " + file);
+            } else {
+                throw AtelesInternalError(
+                    "Unknown error evaluating script: " + file);
+            }
         } else {
             JS_ClearPendingException(this->_cx);
             throw AtelesInvalidArgumentError(
@@ -210,8 +315,13 @@ JSCompartment::call(const std::string& name, std::vector<std::string>& args)
     if(!JS::Call(this->_cx, this_obj, name.c_str(), jsargs, &rval)) {
         JS::RootedValue exc(this->_cx);
         if(!JS_GetPendingException(this->_cx, &exc)) {
-            throw AtelesInternalError(
-                "Unknown calling function.");
+            if(this->_jscx->timed_out()) {
+                throw AtelesTimeoutError(
+                    "Time out calling function: " + name);
+            } else {
+                throw AtelesInternalError(
+                    "Unknown calling function.");
+            }
         } else {
             JS_ClearPendingException(this->_cx);
             throw AtelesInvalidArgumentError("Error calling function: "

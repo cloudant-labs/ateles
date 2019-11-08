@@ -13,6 +13,8 @@
 #ifndef ATELES_JS_H
 #define ATELES_JS_H
 
+#include <condition_variable>
+#include <mutex>
 #include <vector>
 #include <future>
 
@@ -23,17 +25,45 @@ namespace ateles
 {
 
 class JSCompartment;
+class JSCxAutoTimeout;
 
 class JSCx {
   public:
     typedef std::unique_ptr<JSCx> Ptr;
 
     explicit JSCx(size_t max_mem);
+    ~JSCx();
 
     std::unique_ptr<JSCompartment> new_compartment();
 
+    void set_timeout(int ms_timeout);
+    bool check_timeout();
+    bool timed_out();
+
+    void set_watchdog_status(bool status);
+
   private:
     std::unique_ptr<JSContext, void (*)(JSContext*)> _cx;
+
+    // Watchdog setup for capping script execution time
+    void wd_run();
+    std::unique_ptr<std::thread> _wd_thread;
+    std::mutex _wd_lock;
+    std::condition_variable _wd_cv;
+    std::chrono::system_clock::time_point _deadline;
+    bool _timed_out;
+    bool _wd_alive;
+    bool _wd_active;
+};
+
+
+class JSCxAutoTimeout {
+  public:
+    explicit JSCxAutoTimeout(JSCx* cx, int ms_timeout);
+    ~JSCxAutoTimeout();
+
+  private:
+    JSCx* _cx;
 };
 
 
@@ -41,13 +71,14 @@ class JSCompartment {
 public:
     typedef std::unique_ptr<JSCompartment> Ptr;
 
-    explicit JSCompartment(JSContext* cx);
+    explicit JSCompartment(JSCx* jscx, JSContext* cx);
     ~JSCompartment();
 
     std::string eval(const std::string& script, std::vector<std::string>& args);
     std::string call(const std::string& name, std::vector<std::string>& args);
 
 private:
+    JSCx* _jscx;
     JSContext* _cx;
     JS::PersistentRootedObject _global;
 };

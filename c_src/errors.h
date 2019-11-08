@@ -76,6 +76,16 @@ class AtelesResourceExhaustedError : public AtelesError {
     }
 };
 
+class AtelesTimeoutError : public AtelesError {
+public:
+    explicit AtelesTimeoutError(const std::string& what) : AtelesError(what) {}
+
+    virtual grpc::StatusCode code() const throw()
+    {
+        return grpc::StatusCode::DEADLINE_EXCEEDED;
+    }
+};
+
 class AtelesInternalError : public AtelesError {
   public:
     explicit AtelesInternalError(const std::string& what) : AtelesError(what) {}
