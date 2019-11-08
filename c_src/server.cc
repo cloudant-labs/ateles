@@ -306,6 +306,8 @@ Connection::handle_request()
     }
 
     try {
+        JSCxAutoTimeout auto_to(this->_cx, 5000);
+
         std::string result;
         if(this->_req.action() == JSRequest_Action_EVAL) {
             result = this->_compartment->eval(this->_req.script(), args);
