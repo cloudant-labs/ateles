@@ -306,7 +306,11 @@ Connection::handle_request()
     }
 
     try {
-        JSCxAutoTimeout auto_to(this->_cx, 5000);
+        int timeout = this->_req.timeout();
+        if(timeout <= 0) {
+            timeout = 5000;
+        }
+        JSCxAutoTimeout auto_to(this->_cx, timeout);
 
         std::string result;
         if(this->_req.action() == JSRequest_Action_EVAL) {
