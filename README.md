@@ -30,6 +30,13 @@ $ make -j4
 $ make install
 ```
 
+or
+
+```
+brew tap cloudant/homebrew-dbcore
+brew install cloudant/dbcore/mozjs-60
+```
+
 For Debian
 
 ```shell
