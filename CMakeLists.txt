@@ -99,6 +99,14 @@ set(CFLAGS
     ${GPR_CFLAGS}
     ${COVERAGE_OPTS})
 
+set_source_files_properties(
+    ateles.grpc.pb.cc
+    health.grpc.pb.cc
+    c_src/server.cc
+    PROPERTIES
+       COMPILE_FLAGS -Wno-deprecated-declarations
+)
+
 set(INCLUDES
     ${CMAKE_CURRENT_BINARY_DIR}
     ${MOZJS_INCLUDE_DIRS}
