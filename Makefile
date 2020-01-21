@@ -12,11 +12,12 @@
 
 .PHONY: all format init build test coverage clean
 
-all: deps server
+all: server
 	@rebar compile
 
 
 deps:
+	false
 	@test -d deps || rebar get-deps
 
 
@@ -29,16 +30,10 @@ init:
 
 
 server: init
-	@make -C _build
+	@make -C _build -j4
 	@mkdir -p priv/
 	@cp _build/ateles priv/ateles
 
-
-generate: src/ateles_client.erl src/ateles_pb.erl
-
-
-src/ateles_client.erl src/ateles_pb.erl: proto/ateles.proto
-	@REBAR_COLOR=none rebar3 grpc gen
 
 eunit: export ERL_AFLAGS = -config $(shell pwd)/test/eunit.config
 eunit:

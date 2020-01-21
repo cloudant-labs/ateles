@@ -27,17 +27,22 @@
 ]).
 
 
--define(RETRIES, 5).
+-define(REWRITE_CTX_ID, '$rewrite_context$').
+-define(REWRITE_SOURCE_FILES, [
+    "esprima.js",
+    "escodegen.js",
+    "rewrite_fun.js"
+]).
 
 
 rewrite(Source) when is_binary(Source) ->
-    with_ctx("$rewrite$", {ateles_context_rewrite_fun, nil}, fun(Ctx) ->
-        ateles_context_rewrite_fun:rewrite(Ctx, Source)
+    with_rewrite_ctx(fun(JSCtx) ->
+        ateles_util:call(JSCtx, <<"rewriteFun">>, [Source])
     end);
 
 rewrite(Sources) when is_list(Sources) ->
-    with_ctx("$rewrite$", {ateles_context_rewrite_fun, nil}, fun(Ctx) ->
-        ateles_context_rewrite_fun:rewrite_all(Ctx, Sources)
+    with_rewrite_ctx(fun(JSCtx) ->
+        ateles_util:call(JSCtx, <<"rewriteFuns">>, [Sources])
     end).
 
 
@@ -46,70 +51,76 @@ acquire_map_context(CtxOpts) ->
         db_name := DbName,
         sig := Sig,
         lib := Lib,
-        map_funs := MapFuns
+        map_funs := RawMapFuns
     } = CtxOpts,
     CtxId = <<DbName/binary, "-mapctx-", Sig/binary>>,
-    ateles_server:acquire_context(CtxId, {ateles_context_map, {Lib, MapFuns}}).
+
+    {ok, MapFuns} = rewrite(RawMapFuns),
+    InitClosure = fun(Ctx) ->
+        {ok, true} = ateles_util:create_ctx(Ctx),
+        {ok, _} = ateles_util:eval_file(Ctx, "map.js"),
+        {ok, true} = ateles_util:call(Ctx, <<"init">>, [Lib, MapFuns])
+    end,
+    ateles_server:acquire(CtxId, InitClosure).
 
 
 release_map_context(Ctx) ->
-    ateles_server:release_context(Ctx).
+    ateles_server:release(Ctx).
 
 
 map_docs(Ctx, Docs) ->
-    map_docs(Ctx, Docs, ?RETRIES).
-
-
-map_docs(_Ctx, _Docs, Retries) when Retries =< 0 ->
-    erlang:error({map_docs_failed, retries_exhausted});
-
-map_docs(Ctx, Docs, Retries) ->
-    Refs = lists:map(fun(Doc) ->
+    {ok, pmap_docs(fun(Doc) ->
         Json = couch_doc:to_json_obj(Doc, []),
-        ateles_context_map:map_doc_async(Ctx, Json)
-    end, Docs),
-    try
-        map_docs(Ctx, Docs, Refs, [])
-    catch throw:retry ->
-        map_docs(Ctx, Docs, Retries - 1)
-    end.
+        case ateles_util:call(Ctx, <<"mapDoc">>, [Json]) of
+            {ok, Results} ->
+                Tupled = lists:map(fun(ViewResults) ->
+                    lists:map(fun
+                        ([K, V]) -> {K, V};
+                        (Error) when is_binary(Error) -> Error
+                    end, ViewResults)
+                end, Results),
+                {Doc#doc.id, Tupled};
+            {error, Reason} ->
+                erlang:error(Reason)
+        end
+    end, Docs)}.
 
 
-map_docs(_Ctx, [], [], Acc) ->
-    {ok, lists:reverse(Acc)};
-
-map_docs(Ctx, [Doc | RestDocs], [Ref | RestRefs], Acc) ->
-    case ateles_context_map:map_doc_recv(Ref) of
-        {ok, Results} ->
-            Tupled = lists:map(fun(ViewResults) ->
-                lists:map(fun
-                    ([K, V]) -> {K, V};
-                    (Error) when is_binary(Error) -> Error
-                end, ViewResults)
-            end, Results),
-            NewAcc = [{Doc#doc.id, Tupled} | Acc],
-            map_docs(Ctx, RestDocs, RestRefs, NewAcc);
-        {error, Reason} ->
-            erlang:error(Reason);
-        stream_finished ->
-            drain_refs(RestRefs),
-            throw(retry)
-    end.
-
-
-with_ctx(CtxId, CtxInfo, Fun) ->
-    {ok, Ctx} = ateles_server:acquire_context(CtxId, CtxInfo),
+with_rewrite_ctx(Fun) ->
+    InitClosure = fun(Ctx) ->
+        {ok, true} = ateles_util:create_ctx(Ctx),
+        lists:foreach(fun(FileName) ->
+            {ok, _} = ateles_util:eval_file(Ctx, FileName)
+        end, ?REWRITE_SOURCE_FILES)
+    end,
+    {ok, Ctx} = ateles_server:acquire(?REWRITE_CTX_ID, InitClosure),
     try
         Fun(Ctx)
     after
-        ateles_server:release_context(Ctx)
+        ateles_server:release(Ctx)
     end.
 
 
-drain_refs([]) ->
-    ok;
+pmap_docs(Fun, Items) ->
+    Parent = self(),
+    Entries = lists:map(fun(Item) ->
+        spawn_monitor(fun() ->
+            Parent ! {self(), Fun(Item)}
+        end)
+    end, Items),
+    collect(Entries, 5000).
 
-drain_refs([Ref | Rest]) ->
-    ateles_context_map:map_doc_recv(Ref),
-    drain_refs(Rest).
 
+collect([], _Timeout) ->
+    [];
+
+collect([{Pid, Ref} | Rest], Timeout) ->
+    receive
+        {Pid, Result} ->
+            erlang:demonitor(Ref, [flush]),
+            [Result | collect(Rest, Timeout)];
+        {'DOWN', Ref, process, Pid, Error} ->
+            erlang:error({map_docs, Error})
+    after Timeout ->
+        erlang:error({pmap_docs_error, timeout})
+    end.

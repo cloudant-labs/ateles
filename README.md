@@ -10,7 +10,7 @@ Required Dependencies
 For macOS:
 
 ```shell
-$ brew install grpc yasm autoconf@2.13
+$ brew install yasm autoconf@2.13 protobuf openssl@1.1 boost
 $ mkdir -p ~/tmp/spidermonkey && cd ~/tmp/spidermonkey
 $ wget http://ftp.mozilla.org/pub/firefox/releases/60.3.0esr/source/firefox-60.3.0esr.source.tar.xz
 $ tar -xf firefox-60.3.0esr.source.tar.xz
@@ -34,16 +34,24 @@ or
 
 ```
 brew tap cloudant/homebrew-dbcore
-brew install cloudant/dbcore/mozjs-60
+brew install cloudant/dbcore/mozjs-60 protobuf openssl@1.1 boost
 ```
 
-For Debian
+For Debian Buster
+
+
+for certstap:
+golang
+
+cmake
+libboost-dev
+libboost-thread-dev
 
 ```shell
 $ wget -O - https://apt.llvm.org/llvm-snapshot.gpg.key| apt-key add -
 $ echo "deb http://deb.debian.org/debian stretch-backports main" > /etc/apt/sources.list.d/backports.list
 $ apt-get update
-$ apt-get install -y -t stretch-backports libgrpc++-dev libgrpc++1 libgrpc6 libgrpc-dev protobuf-compiler-grpc
+$ apt-get install -y -t protobuf-compiler libboost-thread1.62-dev
 $ apt-get install -y autoconf2.13
 $ apt-get install -y yasm
 $ mkdir -p ~/tmp/spidermonkey && cd ~/tmp/spidermonkey

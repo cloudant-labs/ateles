@@ -37,7 +37,8 @@ map_doc_test_() ->
 map_single_doc() ->
     {ok, Ctx} = ateles:acquire_map_context(single_fun_opts()),
     {ok, Results} = ateles:map_docs(Ctx, [#doc{id = <<"foo">>}]),
-    ?assertEqual([{<<"foo">>, [[{<<"foo">>, null}]]}], Results).
+    ?assertEqual([{<<"foo">>, [[{<<"foo">>, null}]]}], Results),
+    ok = ateles:release_map_context(Ctx).
 
 
 single_fun_opts() ->
