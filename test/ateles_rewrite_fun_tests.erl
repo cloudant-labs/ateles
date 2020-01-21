@@ -21,15 +21,15 @@
 
 rewrite_test_() ->
     {
-        "Basic tests",
+        "Rewrite tests",
         {
             setup,
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
             [
-                ?TDEF(rewrite_simple)%,
-                %?TDEF(rewrite_all),
-                %?TDEF(rewrite_valid)
+                %% ?TDEF(rewrite_simple),
+                %% ?TDEF(rewrite_all),
+                ?TDEF(rewrite_valid)
             ]
         }
     }.

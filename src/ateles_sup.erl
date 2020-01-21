@@ -35,6 +35,10 @@ init([]) ->
     },
     Children = [
         #{
+            id => ateles_conn_server,
+            start => {ateles_conn_server, start_link, []}
+        },
+        #{
             id => ateles_server,
             start => {ateles_server, start_link, []}
         }

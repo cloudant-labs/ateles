@@ -40,13 +40,13 @@ open_close_stream() ->
 
 
 open_close_lots_of_streams() ->
-    open_close_streams(1000).
+    open_close_streams(100).
 
 
 multi_client_open_close_streams() ->
     Self = self(),
     Pids = lists:foldl(fun(_, Acc) ->
-        Pid = spawn(fun() -> multi_client_worker(Self, 100) end),
+        Pid = spawn(fun() -> multi_client_worker(Self, 10) end),
         [Pid | Acc]
     end, [], lists:seq(1, 10)),
     lists:foreach(fun(Pid) ->
@@ -69,22 +69,25 @@ open_close_streams(Count) ->
 
 
 open_close_streams(Count, KeepOpen) ->
+    {ok, Conn} = ateles_conn_server:get_connection(),
     OpenStreams = lists:foldl(fun(_, Streams0) ->
-        {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-        Streams1 = [{rand:uniform(), Stream} | Streams0],
+        {ok, Stream} = ateles_conn_server:get_stream(Conn),
+        CtxId = couch_uuids:random(),
+        {ok, _} = ateles_util:create_ctx(Stream, CtxId),
+        Streams1 = [{rand:uniform(), Stream, CtxId} | Streams0],
 
         case length(Streams1) > KeepOpen of
             true ->
-                [{_, ToClose} | Streams2] = lists:sort(Streams1),
-                grpcbox_client:close_and_recv(ToClose),
+                [{_, CStream, CCtxId} | Streams2] = lists:sort(Streams1),
+                {ok, _} = ateles_util:destroy_ctx(CStream, CCtxId),
                 Streams2;
             false ->
                 Streams1
         end
     end, [], lists:seq(1, Count)),
 
-    lists:foreach(fun({_, Stream}) ->
-        grpcbox_client:close_and_recv(Stream)
+    lists:foreach(fun({_, Stream, CtxId}) ->
+        {ok, _} = ateles_util:destroy_ctx(Stream, CtxId)
     end, OpenStreams).
 
 

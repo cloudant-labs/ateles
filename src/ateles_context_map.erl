@@ -15,7 +15,7 @@
 
 
 -export([
-    start_link/1,
+    start_link/3,
     stop/1,
 
     map_doc_async/2,
@@ -24,12 +24,12 @@
 
 
 -export([
-    init/2
+    init/4
 ]).
 
 
-start_link({Lib, MapFuns}) ->
-    proc_lib:start_link(?MODULE, init, [Lib, MapFuns]).
+start_link(Stream, JSCtxId, {Lib, MapFuns}) ->
+    proc_lib:start_link(?MODULE, init, [Stream, JSCtxId, Lib, MapFuns]).
 
 
 stop(Pid) ->
@@ -46,44 +46,38 @@ map_doc_recv(Ref) ->
     Resp.
 
 
-init(Lib, MapFuns0) ->
+init(Conn, JSCtxId, Lib, MapFuns0) ->
     proc_lib:init_ack({ok, self()}),
+    {ok, Stream} = ateles_conn_server:get_stream(Conn),
+
     {ok, MapFuns1} = ateles:rewrite(MapFuns0),
-    Args = [Lib, MapFuns1],
-    loop(new_stream(Args), Args, queue:new()).
+
+    {ok, _} = ateles_util:create_ctx(Stream, JSCtxId),
+    {ok, _} = ateles_util:eval_file(Stream, JSCtxId, "map.js"),
+    {ok, true} = ateles_util:call(Stream, JSCtxId, <<"init">>, [Lib, MapFuns1]),
+
+    loop(Stream, JSCtxId, queue:new()).
 
 
-loop(Stream, Args, Queue) ->
+loop(Stream, JSCtxId, Queue) ->
     receive
         {call, From, {map_doc, Doc}} ->
-            ok = ateles_util:call_async(Stream, <<"mapDoc">>, [Doc]),
-            loop(Stream, Args, queue:in(From, Queue));
+            ok = ateles_util:call_async(Stream, JSCtxId, <<"mapDoc">>, [Doc]),
+            loop(Stream, JSCtxId, queue:in(From, Queue));
         {call, From, stop} ->
             drain_queue(Queue, closing),
             gen:reply(From, ok),
-            grpcbox_client:close_and_recv(Stream);
-        GrpcMsg ->
-            case ateles_util:handle_async_resp(Stream, GrpcMsg) of
-                skip ->
-                    loop(Stream, Args, Queue);
-                stream_finished ->
-                    drain_queue(Queue, retry),
-                    loop(new_stream(Args), Args, queue:new());
+            ateles_util:destroy_ctx(Stream, JSCtxId);
+        Msg ->
+            case ateles_util:handle_async_resp(Stream, Msg) of
                 {exit, Reason} ->
                     exit(Reason);
                 Resp ->
                     {{value, From}, RestQueue} = queue:out(Queue),
                     gen:reply(From, Resp),
-                    loop(Stream, Args, RestQueue)
+                    loop(Stream, JSCtxId, RestQueue)
             end
     end.
-
-
-new_stream(Args) ->
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    {ok, _} = ateles_util:eval_file(Stream, "map.js"),
-    {ok, true} = ateles_util:call(Stream, <<"init">>, Args),
-    Stream.
 
 
 drain_queue(Queue, Msg) ->

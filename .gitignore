@@ -3,8 +3,10 @@
 _build
 deps
 ebin
+*.pem
 
 coverage/
+out/
 
 erl_crash.dump
 rebar3.crashdump

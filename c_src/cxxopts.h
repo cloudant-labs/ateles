@@ -93,8 +93,8 @@ toLocalString(std::string s)
 class UnicodeStringIterator :
     public std::iterator<std::forward_iterator_tag, int32_t> {
   public:
-    UnicodeStringIterator(const icu::UnicodeString* string, int32_t pos)
-        : s(string), i(pos)
+    UnicodeStringIterator(const icu::UnicodeString* string, int32_t pos) :
+        s(string), i(pos)
     {
     }
 
@@ -315,8 +315,8 @@ class OptionParseException : public OptionException {
 
 class option_exists_error : public OptionSpecException {
   public:
-    option_exists_error(const std::string& option)
-        : OptionSpecException(
+    option_exists_error(const std::string& option) :
+        OptionSpecException(
             "Option " + LQUOTE + option + RQUOTE + " already exists")
     {
     }
@@ -324,17 +324,16 @@ class option_exists_error : public OptionSpecException {
 
 class invalid_option_format_error : public OptionSpecException {
   public:
-    invalid_option_format_error(const std::string& format)
-        : OptionSpecException(
-            "Invalid option format " + LQUOTE + format + RQUOTE)
+    invalid_option_format_error(const std::string& format) :
+        OptionSpecException("Invalid option format " + LQUOTE + format + RQUOTE)
     {
     }
 };
 
 class option_syntax_exception : public OptionParseException {
   public:
-    option_syntax_exception(const std::string& text)
-        : OptionParseException("Argument " + LQUOTE + text + RQUOTE
+    option_syntax_exception(const std::string& text) :
+        OptionParseException("Argument " + LQUOTE + text + RQUOTE
             + " starts with a - but has incorrect syntax")
     {
     }
@@ -342,8 +341,8 @@ class option_syntax_exception : public OptionParseException {
 
 class option_not_exists_exception : public OptionParseException {
   public:
-    option_not_exists_exception(const std::string& option)
-        : OptionParseException(
+    option_not_exists_exception(const std::string& option) :
+        OptionParseException(
             "Option " + LQUOTE + option + RQUOTE + " does not exist")
     {
     }
@@ -351,8 +350,8 @@ class option_not_exists_exception : public OptionParseException {
 
 class missing_argument_exception : public OptionParseException {
   public:
-    missing_argument_exception(const std::string& option)
-        : OptionParseException(
+    missing_argument_exception(const std::string& option) :
+        OptionParseException(
             "Option " + LQUOTE + option + RQUOTE + " is missing an argument")
     {
     }
@@ -360,8 +359,8 @@ class missing_argument_exception : public OptionParseException {
 
 class option_requires_argument_exception : public OptionParseException {
   public:
-    option_requires_argument_exception(const std::string& option)
-        : OptionParseException(
+    option_requires_argument_exception(const std::string& option) :
+        OptionParseException(
             "Option " + LQUOTE + option + RQUOTE + " requires an argument")
     {
     }
@@ -370,8 +369,8 @@ class option_requires_argument_exception : public OptionParseException {
 class option_not_has_argument_exception : public OptionParseException {
   public:
     option_not_has_argument_exception(const std::string& option,
-        const std::string& arg)
-        : OptionParseException("Option " + LQUOTE + option + RQUOTE
+        const std::string& arg) :
+        OptionParseException("Option " + LQUOTE + option + RQUOTE
             + " does not take an argument, but argument " + LQUOTE + arg
             + RQUOTE + " given")
     {
@@ -380,8 +379,8 @@ class option_not_has_argument_exception : public OptionParseException {
 
 class option_not_present_exception : public OptionParseException {
   public:
-    option_not_present_exception(const std::string& option)
-        : OptionParseException(
+    option_not_present_exception(const std::string& option) :
+        OptionParseException(
             "Option " + LQUOTE + option + RQUOTE + " not present")
     {
     }
@@ -389,8 +388,8 @@ class option_not_present_exception : public OptionParseException {
 
 class argument_incorrect_type : public OptionParseException {
   public:
-    argument_incorrect_type(const std::string& arg)
-        : OptionParseException(
+    argument_incorrect_type(const std::string& arg) :
+        OptionParseException(
             "Argument " + LQUOTE + arg + RQUOTE + " failed to parse")
     {
     }
@@ -398,8 +397,8 @@ class argument_incorrect_type : public OptionParseException {
 
 class option_required_exception : public OptionParseException {
   public:
-    option_required_exception(const std::string& option)
-        : OptionParseException("Option " + LQUOTE + option + RQUOTE
+    option_required_exception(const std::string& option) :
+        OptionParseException("Option " + LQUOTE + option + RQUOTE
             + " is required but not present")
     {
     }
@@ -833,13 +832,13 @@ class OptionDetails {
     OptionDetails(const std::string& short_,
         const std::string& long_,
         const String& desc,
-        std::shared_ptr<const Value> val)
-        : m_short(short_), m_long(long_), m_desc(desc), m_value(val), m_count(0)
+        std::shared_ptr<const Value> val) :
+        m_short(short_), m_long(long_), m_desc(desc), m_value(val), m_count(0)
     {
     }
 
-    OptionDetails(const OptionDetails& rhs)
-        : m_desc(rhs.m_desc), m_count(rhs.m_count)
+    OptionDetails(const OptionDetails& rhs) :
+        m_desc(rhs.m_desc), m_count(rhs.m_count)
     {
         m_value = rhs.m_value->clone();
     }
@@ -935,8 +934,8 @@ class OptionValue {
 
 class KeyValue {
   public:
-    KeyValue(std::string key_, std::string value_)
-        : m_key(std::move(key_)), m_value(std::move(value_))
+    KeyValue(std::string key_, std::string value_) :
+        m_key(std::move(key_)), m_value(std::move(value_))
     {
     }
 
@@ -1035,8 +1034,8 @@ struct Option
     Option(const std::string& opts,
         const std::string& desc,
         const std::shared_ptr<const Value>& value = ::cxxopts::value<bool>(),
-        const std::string& arg_help = "")
-        : opts_(opts), desc_(desc), value_(value), arg_help_(arg_help)
+        const std::string& arg_help = "") :
+        opts_(opts), desc_(desc), value_(value), arg_help_(arg_help)
     {
     }
 
@@ -1051,13 +1050,15 @@ class Options {
         OptionMap;
 
   public:
-    Options(std::string program, std::string help_string = "")
-        : m_program(std::move(program)),
-          m_help_string(toLocalString(std::move(help_string))),
-          m_custom_help("[OPTION...]"),
-          m_positional_help("positional parameters"), m_show_positional(false),
-          m_allow_unrecognised(false), m_options(std::make_shared<OptionMap>()),
-          m_next_positional(m_positional.end())
+    Options(std::string program, std::string help_string = "") :
+        m_program(std::move(program)),
+        m_help_string(toLocalString(std::move(help_string))),
+        m_custom_help("[OPTION...]"),
+        m_positional_help("positional parameters"),
+        m_show_positional(false),
+        m_allow_unrecognised(false),
+        m_options(std::make_shared<OptionMap>()),
+        m_next_positional(m_positional.end())
     {
     }
 
@@ -1149,8 +1150,8 @@ class Options {
 
 class OptionAdder {
   public:
-    OptionAdder(Options& options, std::string group)
-        : m_options(options), m_group(std::move(group))
+    OptionAdder(Options& options, std::string group) :
+        m_options(options), m_group(std::move(group))
     {
     }
 
@@ -1266,10 +1267,11 @@ inline ParseResult::ParseResult(
     std::vector<std::string> positional,
     bool allow_unrecognised,
     int& argc,
-    char**& argv)
-    : m_options(options), m_positional(std::move(positional)),
-      m_next_positional(m_positional.begin()),
-      m_allow_unrecognised(allow_unrecognised)
+    char**& argv) :
+    m_options(options),
+    m_positional(std::move(positional)),
+    m_next_positional(m_positional.begin()),
+    m_allow_unrecognised(allow_unrecognised)
 {
     parse(argc, argv);
 }

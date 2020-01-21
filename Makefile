@@ -12,11 +12,12 @@
 
 .PHONY: all format init build test coverage clean
 
-all: deps server
+all: server
 	@rebar compile
 
 
 deps:
+	false
 	@test -d deps || rebar get-deps
 
 
@@ -24,11 +25,21 @@ format:
 	clang-format -style=file -i c_src/*
 
 
+init: export PKG_CONFIG_PATH = /usr/local/opt/openssl@1.1/lib/pkgconfig/
 init:
 	@test -f _build/CMakeCache.txt || (mkdir -p _build && cd _build && cmake ../)
 
 
-server: init
+ca.pem:
+	@certstrap init --common-name somewhere.over.the.rainbow --passphrase ""
+	@certstrap request-cert -ip 127.0.0.1 --passphrase "" -domain localhost
+	@certstrap sign localhost --CA somewhere.over.the.rainbow --passphrase ""
+	@openssl pkcs8 -topk8 -nocrypt -in out/localhost.key -out key.pem
+	@cp out/localhost.crt cert.pem
+	@cp out/somewhere.over.the.rainbow.crt ca.pem
+
+
+server: init ca.pem
 	@make -C _build
 	@mkdir -p priv/
 	@cp _build/ateles priv/ateles

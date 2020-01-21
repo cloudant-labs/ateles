@@ -10,29 +10,24 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-syntax = "proto3";
+#ifndef ATELES_CONNECTION_MGR_H
+#define ATELES_CONNECTION_MGR_H
 
-service Ateles {
-  rpc Execute(stream JSRequest) returns (stream JSResponse) {}
-}
+#include <boost/core/noncopyable.hpp>
+#include <set>
 
+class Connection;
 
-message JSRequest {
-    enum Action {
-        CREATE_CTX = 0;
-        DESTROY_CTX = 1;
-        EVAL = 2;
-        CALL = 3;
-    }
-    string context_id = 1;
-    Action action = 2;
-    string script = 3;
-    repeated string args = 4;
-    int32 timeout = 5;
-}
+class ConnectionManager : private boost::noncopyable {
+  public:
+    ConnectionManager();
 
+    void start(std::shared_ptr<Connection> conn);
+    void stop(std::shared_ptr<Connection> conn);
+    void stop_all();
 
-message JSResponse {
-    int32 status = 1;
-    string result = 2;
-}
+  private:
+    std::set<std::shared_ptr<Connection>> _conns;
+};
+
+#endif  // Included connection_mgr.h

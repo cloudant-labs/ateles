@@ -51,7 +51,11 @@
     ctx_mod,
     pid,
     ref_count,
-    last_use
+    last_use,
+
+    % State for the fron side of things
+    fconn,
+    js_ctx_id
 }).
 
 
@@ -147,6 +151,13 @@ handle_call(Msg, _From, St) ->
     {stop, {bad_call, Msg}, {bad_call, Msg}, St}.
 
 
+handle_cast({close, Conn}, St) ->
+    Workers = ets:match_object(?WORKERS, #worker{fconn = Conn, _ = '_'}),
+    lists:foreach(fun(#worker{pid = Pid}) ->
+        exit(Pid, conn_died)
+    end, Workers),
+    {noreply, St};
+
 handle_cast(Msg, St) ->
     {stop, {bad_cast, Msg}, St}.
 
@@ -211,13 +222,18 @@ acquire(CtxId, {CtxMod, CtxArg}, #{max_workers := MaxWorkers} = St) ->
             ets:delete(?LRU, LU),
             {ok, Pid};
         [] when NumWorkers < MaxWorkers ->
-            {ok, CtxPid} = CtxMod:start_link(CtxArg),
+            {ok, Conn} = ateles_conn_server:get_connection(),
+            JSCtxId = couch_uuids:random(),
+            {ok, CtxPid} = CtxMod:start_link(Conn, JSCtxId, CtxArg),
             Worker = #worker{
                 ctx_id = CtxId,
                 ctx_mod = CtxMod,
                 pid = CtxPid,
                 ref_count = 0,
-                last_use = undefined
+                last_use = undefined,
+
+                fconn = Conn,
+                js_ctx_id = JSCtxId
             },
             ets:insert(?WORKERS, Worker),
             {ok, CtxPid};

@@ -15,16 +15,24 @@
 
 
 -export([
-    eval/3,
+    create_ctx/0,
+    create_ctx/2,
+    destroy_ctx/2,
+
     eval/4,
-    call/3,
+    eval/5,
     call/4,
-    call_async/3,
+    call/5,
     call_async/4,
+    call_async/5,
     handle_async_resp/2,
 
-    eval_file/2,
+    eval_file/3,
     load_file/1,
+
+    fron_prompt/2,
+    fron_send/2,
+    fron_recv/1,
 
     gen_call_async/2,
     gen_recv_async/1,
@@ -34,13 +42,38 @@
 ]).
 
 
-eval(Stream, FileName, Script) ->
-    eval(Stream, FileName, Script, 5000).
+create_ctx() ->
+    CtxId = couch_uuids:random(),
+    {ok, Conn} = ateles_conn_server:get_connection(),
+    {ok, Stream} = ateles_conn_server:get_stream(Conn),
+    {ok, _} = create_ctx(Stream, CtxId),
+    {ok, Stream, CtxId}.
 
 
-eval(Stream, FileName, Script, Timeout) ->
+create_ctx(Stream, JSCtxId) ->
     Req = #{
-        action => 0,
+        action => 'CREATE_CTX',
+        context_id => JSCtxId
+    },
+    fron_prompt(Stream, Req).
+
+
+destroy_ctx(Stream, JSCtxId) ->
+    Req = #{
+        action => 'DESTROY_CTX',
+        context_id => JSCtxId
+    },
+    fron_prompt(Stream, Req).
+
+
+eval(Stream, JSCtxId, FileName, Script) ->
+    eval(Stream, JSCtxId, FileName, Script, 5000).
+
+
+eval(Stream, JSCtxId, FileName, Script, Timeout) ->
+    Req = #{
+        action => 'EVAL',
+        context_id => JSCtxId,
         script => Script,
         args => [
             list_to_binary("file=" ++ FileName),
@@ -48,100 +81,58 @@ eval(Stream, FileName, Script, Timeout) ->
         ],
         timeout => Timeout
     },
-    ok = grpcbox_client:send(Stream, Req),
-    {ok, Resp} = grpcbox_client:recv_data(Stream, infinity),
-    case Resp of
-        #{status := 0, result := Result} ->
-            {ok, Result};
-        #{status := Error, result := Reason} ->
-            {error, {Error, Reason}}
-    end.
+    fron_prompt(Stream, Req).
 
 
-call(Stream, Function, Args) ->
-    call(Stream, Function, Args, 5000).
+call(Stream, JSCtxId, Function, Args) ->
+    call(Stream, JSCtxId, Function, Args, 5000).
 
 
-call(Stream, Function, Args, Timeout) ->
+call(Stream, JSCtxId, Function, Args, Timeout) ->
     Req = #{
-        action => 1,
+        action => 'CALL',
+        context_id => JSCtxId,
         script => Function,
         args => lists:map(fun jiffy:encode/1, Args),
         timeout => Timeout
     },
-    ok = grpcbox_client:send(Stream, Req),
-    case grpcbox_client:recv_data(Stream, infinity) of
-        {ok, #{status := 0, result := Result}} ->
-            {ok, jiffy:decode(Result)};
-        {ok, #{status := Error, result := Reason}} ->
-            {error, {Error, Reason}};
-        stream_finished ->
-            stream_finished
-    end.
+    fron_prompt(Stream, Req).
 
 
-call_async(Stream, Function, Args) ->
-    call_async(Stream, Function, Args, 5000).
+call_async(Stream, JSCtxId, Function, Args) ->
+    call_async(Stream, JSCtxId, Function, Args, 5000).
 
 
-call_async(Stream, Function, Args, Timeout) ->
+call_async(Stream, JSCtxId, Function, Args, Timeout) ->
     Req = #{
-        action => 1,
+        action => 'CALL',
+        context_id => JSCtxId,
         script => Function,
         args => lists:map(fun jiffy:encode/1, Args),
         timeout => Timeout
     },
-    ok = grpcbox_client:send(Stream, Req).
+    fron_send(Stream, Req).
 
 
 handle_async_resp(Stream, Msg) ->
-    #{
-        stream_id := Id,
-        stream_pid := Pid,
-        monitor_ref := Ref
-    } = Stream,
+    {fron_stream, _Socket, _StreamId, Ref} = Stream,
     case Msg of
-        {headers, Id, _Resp} ->
-            skip;
-        {data, Id, Resp} ->
-            case Resp of
+        {fron_msg, Ref, MsgAcc} ->
+            Resp = iolist_to_binary(lists:reverse(MsgAcc)),
+            case ateles_pb:decode_msg(Resp, js_response) of
                 #{status := 0, result := Result} ->
                     {ok, jiffy:decode(Result)};
-                #{status := Error, result := Reason} ->
-                    {error, {Error, Reason}}
+                #{status := Error, result := Result} ->
+                    {error, {Error, Result}}
             end;
-        {eos, Id} ->
-            erlang:demonitor(Ref, [flush]),
-            stream_finished;
-        {eos, _DifferentId} ->
-            % Message from a previous stream
-            skip;
-        {'END_STREAM', Id} ->
-            erlang:demonitor(Ref, [flush]),
-            stream_finished;
-        {'END_STREAM', _DifferentId} ->
-            % Message from a previous stream
-            skip;
-        {'DOWN', Ref, process, Pid, _Reason} ->
-            case grpcbox_client:recv_trailers(Stream, 0) of
-                {ok, {<<"0">> = _Status, _Message, _Metadata}} ->
-                    stream_finished;
-                {ok, {Status, Message, _Metadata}} ->
-                    {exit, {Status, Message}};
-                timeout ->
-                    stream_finished
-            end;
-        {'DOWN', _DifferentRef, process, _DifferentPid, _Reason} ->
-            % Message from a previous stream
-            skip;
         BadMsg ->
             {exit, {invalid_msg, BadMsg}}
     end.
 
 
-eval_file(Stream, FileName) when is_list(FileName) ->
+eval_file(Stream, JSCtxId, FileName) when is_list(FileName) ->
     Source = ateles_util:load_file(FileName),
-    eval(Stream, FileName, Source).
+    eval(Stream, JSCtxId, FileName, Source).
 
 
 load_file(FileName) when is_list(FileName) ->
@@ -182,6 +173,26 @@ gen_recv_async(Ref, Timeout) ->
     end.
 
 
+fron_prompt(Stream, Req) ->
+    fron_send(Stream, Req),
+    fron_recv(Stream).
+
+
+fron_send(Stream, Req) ->
+    Msg = ateles_pb:encode_msg(Req, js_request),
+    fron:send(Stream, Msg).
+
+
+fron_recv(Stream) ->
+    {ok, Resp} = fron:recv(Stream, infinity),
+    case ateles_pb:decode_msg(Resp, js_response) of
+        #{status := 0, result := Result} ->
+            {ok, jiffy:decode(Result)};
+        #{status := Error, result := Result} ->
+            {error, {Error, Result}}
+    end.
+
+
 ensure_server() ->
     case application:get_env(ateles, server) of
         undefined ->
@@ -193,25 +204,30 @@ ensure_server() ->
 
 
 run_server() ->
-    PrivDir = case code:priv_dir(?MODULE) of
+    AppDir = case code:priv_dir(?MODULE) of
         {error, _} ->
             EbinDir = filename:dirname(code:which(?MODULE)),
-            AppPath = filename:dirname(EbinDir),
-            filename:join(AppPath, "priv");
+            filename:dirname(EbinDir);
         Path ->
             Path
     end,
-    Host = config:get("ateles", "service_url", "localhost"),
-    Port = config:get("atelese", "service_port", "8444"),
-    Address = list_to_binary(Host ++ ":" ++ Port),
+    PrivDir = filename:join(AppDir, "priv"),
+
     Command = filename:join(PrivDir, "ateles"),
+    Host = config:get("ateles", "service_url", "127.0.0.1"),
+    Port = config:get("atelese", "service_port", "8444"),
+    CertFile = filename:join(AppDir, "cert.pem"),
+    KeyFile = filename:join(AppDir, "key.pem"),
+
     Args = [
         exit_status,
         {line, 1024},
         {args, [
-            <<"-a">>, Address,
-            <<"-n">>, <<"2">>,
-            <<"-p">>, list_to_binary(os:getpid())
+            <<"-a">>, Host,
+            <<"-p">>, Port,
+            <<"--cert">>, CertFile,
+            <<"--key">>, KeyFile,
+            <<"--parent_pid">>, list_to_binary(os:getpid())
         ]
     }],
     ServerPort = erlang:open_port({spawn_executable, Command}, Args),
@@ -225,4 +241,3 @@ server_loop(Port) ->
         Error ->
             io:format(standard_error, "SERVER ERROR: ~p~n", [Error])
     end.
-

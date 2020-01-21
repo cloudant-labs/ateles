@@ -14,17 +14,13 @@
 #define ATELES_JS_H
 
 #include <condition_variable>
+#include <future>
 #include <mutex>
 #include <vector>
-#include <future>
 
-#include "js/Initialization.h"
+#include "errors.h"
 #include "jsapi.h"
 
-namespace ateles
-{
-
-class JSCompartment;
 class JSCxAutoTimeout;
 
 class JSCx {
@@ -34,8 +30,8 @@ class JSCx {
     explicit JSCx(size_t max_mem);
     ~JSCx();
 
-    std::unique_ptr<JSCompartment> new_compartment();
-
+    std::string eval(const std::string& script, std::vector<std::string>& args);
+    std::string call(const std::string& name, std::vector<std::string>& args);
     void set_timeout(int ms_timeout);
     bool check_timeout();
     bool timed_out();
@@ -43,7 +39,9 @@ class JSCx {
     void set_watchdog_status(bool status);
 
   private:
-    std::unique_ptr<JSContext, void (*)(JSContext*)> _cx;
+    JSContext* _cx;
+    std::unique_ptr<JSContext, void (*)(JSContext*)> _cx_mgr;
+    JS::PersistentRootedObject _global;
 
     // Watchdog setup for capping script execution time
     void wd_run();
@@ -56,7 +54,6 @@ class JSCx {
     bool _wd_active;
 };
 
-
 class JSCxAutoTimeout {
   public:
     explicit JSCxAutoTimeout(JSCx* cx, int ms_timeout);
@@ -65,32 +62,5 @@ class JSCxAutoTimeout {
   private:
     JSCx* _cx;
 };
-
-
-class JSCompartment {
-public:
-    typedef std::unique_ptr<JSCompartment> Ptr;
-
-    explicit JSCompartment(JSCx* jscx, JSContext* cx);
-    ~JSCompartment();
-
-    std::string eval(const std::string& script, std::vector<std::string>& args);
-    std::string call(const std::string& name, std::vector<std::string>& args);
-
-private:
-    JSCx* _jscx;
-    JSContext* _cx;
-    JS::PersistentRootedObject _global;
-};
-
-
-std::string js_to_string(JSContext* cx, JS::HandleValue val);
-JSString* string_to_js(JSContext* cx, const std::string& s);
-std::string format_string(JSContext* cx, JS::HandleString str);
-std::string format_value(JSContext* cx, JS::HandleValue val);
-std::string format_exception(JSContext* cx, JS::HandleValue exc);
-void load_script(JSContext* cx, std::string name, std::string source);
-
-}  // namespace ateles
 
 #endif  // included js.h

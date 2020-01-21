@@ -36,37 +36,25 @@ timeout_test_() ->
 
 
 timeout_eval_default() ->
-    % The settings ack frame apparently isn't returned until
-    % the first user generated frame is returned so we have
-    % to run a first quick exchange so that chatterbox doesn't
-    % blow up due to not setting the settings ack.
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    Result1 = ateles_util:eval(Stream, <<"foo.js">>, <<"var b = 12;">>),
-    ?assertMatch({ok, _}, Result1),
-
+    {ok, Stream, CtxId} = ateles_util:create_ctx(),
     Script = <<"(function() {while(1) {continue;}})();">>,
-    Result2 = ateles_util:eval(Stream, <<"foo.js">>, Script, 0),
-    ?assertMatch({error, {4, <<"Time out", _/binary>>}}, Result2),
-    grpcbox_client:close_and_recv(Stream).
+    Result = ateles_util:eval(Stream, CtxId, <<"foo.js">>, Script, 0),
+    ?assertMatch({error, {1, <<"Time out", _/binary>>}}, Result),
+    {ok, _} = ateles_util:destroy_ctx(Stream, CtxId).
 
 
 timeout_eval_control() ->
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    Result1 = ateles_util:eval(Stream, <<"foo.js">>, <<"var b = 12;">>),
-    ?assertMatch({ok, _}, Result1),
-
+    {ok, Stream, CtxId} = ateles_util:create_ctx(),
     Script = <<"(function() {while(1) {continue;}})();">>,
-    Result2 = ateles_util:eval(Stream, <<"foo.js">>, Script, 250),
-    ?assertMatch({error, {4, <<"Time out", _/binary>>}}, Result2),
-    grpcbox_client:close_and_recv(Stream).
+    Result = ateles_util:eval(Stream, CtxId, <<"foo.js">>, Script, 250),
+    ?assertMatch({error, {1, <<"Time out", _/binary>>}}, Result),
+    {ok, _} = ateles_util:destroy_ctx(Stream, CtxId).
 
 
 timeout_call() ->
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
+    {ok, Stream, CtxId} = ateles_util:create_ctx(),
     Script = <<"function wait() {var a = 1; while(true) {a += 1;}};">>,
-    Result1 = ateles_util:eval(Stream, <<"foo.js">>, Script),
-    ?assertMatch({ok, _}, Result1),
-
-    Result2 = ateles_util:call(Stream, <<"wait">>, [], 250),
-    ?assertMatch({error, {4, <<"Time out", _/binary>>}}, Result2),
-    grpcbox_client:close_and_recv(Stream).
+    {ok, _} = ateles_util:eval(Stream, CtxId, <<"foo.js">>, Script, 0),
+    Result = ateles_util:call(Stream, CtxId, <<"wait">>, [], 250),
+    ?assertMatch({error, {1, <<"Time out", _/binary>>}}, Result),
+    {ok, _} = ateles_util:destroy_ctx(Stream, CtxId).

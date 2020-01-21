@@ -10,29 +10,31 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-syntax = "proto3";
+#include "connection_mgr.h"
 
-service Ateles {
-  rpc Execute(stream JSRequest) returns (stream JSResponse) {}
+#include "connection.h"
+
+ConnectionManager::ConnectionManager() {}
+
+void
+ConnectionManager::start(std::shared_ptr<Connection> conn)
+{
+    _conns.insert(conn);
+    conn->start();
 }
 
+void
+ConnectionManager::stop(std::shared_ptr<Connection> conn)
+{
+    _conns.erase(conn);
+    conn->stop();
+}
 
-message JSRequest {
-    enum Action {
-        CREATE_CTX = 0;
-        DESTROY_CTX = 1;
-        EVAL = 2;
-        CALL = 3;
+void
+ConnectionManager::stop_all()
+{
+    for(auto conn : _conns) {
+        conn->stop();
     }
-    string context_id = 1;
-    Action action = 2;
-    string script = 3;
-    repeated string args = 4;
-    int32 timeout = 5;
-}
-
-
-message JSResponse {
-    int32 status = 1;
-    string result = 2;
+    _conns.clear();
 }

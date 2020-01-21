@@ -15,8 +15,13 @@ project (ateles)
 
 # Configure dependencies
 # Eventually we'll want to expand the mozjs version range
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+find_package(Boost 1.67 REQUIRED COMPONENTS thread)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MOZJS REQUIRED mozjs-60)
+pkg_check_modules(OPENSSL REQUIRED openssl)
 pkg_check_modules(PROTOBUF REQUIRED protobuf)
 pkg_check_modules(GRPC REQUIRED grpc++)
 pkg_check_modules(GPR REQUIRED gpr)
@@ -91,9 +96,11 @@ add_executable(
 set(CFLAGS
     -g
     -std=c++14
+    -fvisibility=hidden
     -Wall
     -Werror
     ${MOZJS_CFLAGS}
+    ${OPENSSL_CFLAGS}
     ${PROTOBUF_CFLAGS}
     ${GRPC_CFLAGS}
     ${GPR_CFLAGS}
@@ -109,13 +116,16 @@ set_source_files_properties(
 
 set(INCLUDES
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${Boost_INCLUDE_DIRS}
     ${MOZJS_INCLUDE_DIRS}
+    ${OPENSSL_INCLUDE_DIRS}
     ${PROTOBUF_INCLUDE_DIRS}
     ${GRPC_INCLUDE_DIRS}
     ${GPR_INCLUDE_DIRS})
 
 set(LDFLAGS
     ${MOZJS_LDFLAGS}
+    ${OPENSSL_LDFLAGS}
     ${PROTOBUF_LDFLAGS}
     ${GRPC_LDFLAGS}
     ${GPR_LDFLAGS}
@@ -123,4 +133,5 @@ set(LDFLAGS
 
 target_compile_options(ateles PUBLIC ${CFLAGS})
 target_include_directories(ateles PUBLIC ${INCLUDES})
-target_link_libraries(ateles ${LDFLAGS})
+target_link_libraries(ateles ${LDFLAGS} ${Boost_LIBRARIES})
+

@@ -15,7 +15,7 @@
 
 
 -export([
-    start_link/1,
+    start_link/3,
     stop/1,
 
     rewrite/2,
@@ -24,7 +24,7 @@
 
 
 -export([
-    init/0
+    init/1
 ]).
 
 
@@ -38,8 +38,8 @@
 -define(RETRIES, 5).
 
 
-start_link(_) ->
-    proc_lib:start_link(?MODULE, init, []).
+start_link(Stream, JSCtxId, _) ->
+    proc_lib:start_link(?MODULE, init, [{Stream, JSCtxId}]).
 
 
 stop(Pid) ->
@@ -57,39 +57,32 @@ rewrite_all({_CtxId, Pid}, Sources) when is_list(Sources) ->
     Resp.
 
 
-init() ->
+init({Conn, JSCtxId}) ->
     proc_lib:init_ack({ok, self()}),
-    loop(new_stream()).
+    {ok, Stream} = ateles_conn_server:get_stream(Conn),
+    {ok, _} = ateles_util:create_ctx(Stream, JSCtxId),
+    lists:foreach(fun(FileName) ->
+        {ok, _} = ateles_util:eval_file(Stream, JSCtxId, FileName)
+    end, ?SOURCE_FILES),
+    loop(Stream, JSCtxId).
 
 
-loop(Stream) ->
+loop(Stream, JSCtxId) ->
     receive
         {call, From, {rewrite, Source}} ->
-            do_call(Stream, From, <<"rewriteFun">>, [Source], ?RETRIES);
+            call(Stream, JSCtxId, From, <<"rewriteFun">>, [Source], ?RETRIES);
         {call, From, {rewrite_all, Sources}} ->
-            do_call(Stream, From, <<"rewriteFuns">>, [Sources], ?RETRIES);
+            call(Stream, JSCtxId, From, <<"rewriteFuns">>, [Sources], ?RETRIES);
         {call, From, stop} ->
             gen:reply(From, ok),
-            grpcbox_client:close_and_recv(Stream)
+            ateles_util:destroy_ctx(Stream, JSCtxId)
     end.
 
 
-new_stream() ->
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    lists:foreach(fun(FileName) ->
-        {ok, _} = ateles_util:eval_file(Stream, FileName)
-    end, ?SOURCE_FILES),
-    Stream.
-
-
-do_call(_Stream, _From, _Fun, _Args, Retries) when Retries =< 0 ->
+call(_Stream, _JSCtxId, _From, _Fun, _Args, Retries) when Retries =< 0 ->
     erlang:error({failed_rewrite, retries_exhausted});
 
-do_call(Stream, From, Fun, Args, Retries) when Retries > 0 ->
-    case ateles_util:call(Stream, Fun, Args) of
-        stream_finished ->
-            do_call(new_stream(), From, Fun, Args, Retries - 1);
-        Resp ->
-            gen:reply(From, Resp)
-    end,
-    loop(Stream).
+call(Stream, JSCtxId, From, Fun, Args, Retries) when Retries > 0 ->
+    Resp = ateles_util:call(Stream, JSCtxId, Fun, Args),
+    gen:reply(From, Resp),
+    loop(Stream, JSCtxId).

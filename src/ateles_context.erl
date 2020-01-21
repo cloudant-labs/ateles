@@ -13,5 +13,6 @@
 -module(ateles_context).
 
 
--callback start_link(CtxArg :: any()) -> {ok, pid()} | {error, any()}.
+-callback start_link(Stream :: any(), JSCtxId :: binary(), CtxArg :: any()) ->
+    {ok, pid()} | {error, any()}.
 -callback stop(pid()) -> ok | {error, any()}.
