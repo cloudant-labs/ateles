@@ -15,14 +15,6 @@
 
 #include <exception>
 
-#include <grpc/grpc.h>
-#include <grpcpp/security/server_credentials.h>
-#include <grpcpp/server.h>
-#include <grpcpp/server_builder.h>
-#include <grpcpp/server_context.h>
-
-namespace ateles
-{
 class AtelesExit : public std::exception {
 };
 
@@ -31,9 +23,6 @@ class AtelesError : public std::exception {
     explicit AtelesError(const std::string& what) : _what(what) {}
 
     virtual ~AtelesError() throw() {}
-
-    virtual grpc::StatusCode code() const throw() = 0;
-
     virtual const char* what() const throw() { return this->_what.c_str(); }
 
   protected:
@@ -42,60 +31,33 @@ class AtelesError : public std::exception {
 
 class AtelesInvalidArgumentError : public AtelesError {
   public:
-    explicit AtelesInvalidArgumentError(const std::string& what)
-        : AtelesError(what)
+    explicit AtelesInvalidArgumentError(const std::string& what) :
+        AtelesError(what)
     {
-    }
-
-    virtual grpc::StatusCode code() const throw()
-    {
-        return grpc::StatusCode::INVALID_ARGUMENT;
     }
 };
 
 class AtelesNotFoundError : public AtelesError {
   public:
     explicit AtelesNotFoundError(const std::string& what) : AtelesError(what) {}
-
-    virtual grpc::StatusCode code() const throw()
-    {
-        return grpc::StatusCode::NOT_FOUND;
-    }
 };
 
 class AtelesResourceExhaustedError : public AtelesError {
   public:
-    explicit AtelesResourceExhaustedError(const std::string& what)
-        : AtelesError(what)
+    explicit AtelesResourceExhaustedError(const std::string& what) :
+        AtelesError(what)
     {
-    }
-
-    virtual grpc::StatusCode code() const throw()
-    {
-        return grpc::StatusCode::RESOURCE_EXHAUSTED;
     }
 };
 
 class AtelesTimeoutError : public AtelesError {
-public:
+  public:
     explicit AtelesTimeoutError(const std::string& what) : AtelesError(what) {}
-
-    virtual grpc::StatusCode code() const throw()
-    {
-        return grpc::StatusCode::DEADLINE_EXCEEDED;
-    }
 };
 
 class AtelesInternalError : public AtelesError {
   public:
     explicit AtelesInternalError(const std::string& what) : AtelesError(what) {}
-
-    virtual grpc::StatusCode code() const throw()
-    {
-        return grpc::StatusCode::INTERNAL;
-    }
 };
-
-}  // namespace ateles
 
 #endif  // included exceptions.h

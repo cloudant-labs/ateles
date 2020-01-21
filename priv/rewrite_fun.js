@@ -44,7 +44,7 @@ function rewriteFunInt(fun) {
 
 function rewriteFun(funJSON) {
     const fun = JSON.parse(funJSON);
-    return JSON.stringify(rewriteFunInt(fun));
+    return rewriteFunInt(fun);
 }
 
 function rewriteFuns(funsJSON) {
@@ -52,5 +52,5 @@ function rewriteFuns(funsJSON) {
     const results = Array.from(funs, (fun) => {
         return rewriteFunInt(fun);
     });
-    return JSON.stringify(results);
+    return results;
 }

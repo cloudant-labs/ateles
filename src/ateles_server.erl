@@ -19,8 +19,8 @@
 -export([
     start_link/0,
 
-    acquire_context/2,
-    release_context/1
+    acquire/2,
+    release/1
 ]).
 
 
@@ -34,10 +34,10 @@
 ]).
 
 
--define(WORKERS, ateles_server_workers).
+-define(CONTEXTS, ateles_server_contexts).
 -define(CLIENTS, ateles_server_clients).
 -define(LRU, ateles_server_lru).
--define(MAX_WORKERS, 50).
+-define(MAX_CONTEXTS, 50).
 
 -ifdef(TEST).
 -define(VALIDATE(Step), validate_tables(Step)).
@@ -46,14 +46,12 @@
 -endif.
 
 
--record(worker, {
+-record(ctx, {
     ctx_id,
-    ctx_mod,
-    pid,
+    js_ctx,
     ref_count,
     last_use
 }).
-
 
 -record(client, {
     pid,
@@ -67,40 +65,40 @@ start_link() ->
     gen_server:start_link({local, ?MODULE}, ?MODULE, [], []).
 
 
-acquire_context(CtxId, CtxInfo) ->
-    gen_server:call(?MODULE, {acquire, CtxId, CtxInfo}).
+acquire(CtxId, InitClosure) ->
+    gen_server:call(?MODULE, {acquire, CtxId, InitClosure}).
 
 
-release_context({CtxId, Pid}) ->
-    gen_server:call(?MODULE, {release, CtxId, Pid}).
+release({CtxId, _JSCtx}) ->
+    gen_server:call(?MODULE, {release, CtxId}).
 
 
 init(_) ->
     process_flag(trap_exit, true),
-    ets:new(?WORKERS, [set, protected, named_table, {keypos, #worker.ctx_id}]),
+    ets:new(?CONTEXTS, [set, protected, named_table, {keypos, #ctx.ctx_id}]),
     ets:new(?CLIENTS, [bag, protected, named_table, {keypos, #client.pid}]),
     ets:new(?LRU, [ordered_set, protected, named_table]),
     {ok, #{
-        max_workers => max_workers()
+        max_contexts => max_contexts()
     }}.
 
 
 terminate(_, _St) ->
-    ets:foldl(fun(Worker, _) ->
-        #worker{
-            ctx_mod = CtxMod,
-            pid = Pid
-        } = Worker,
-        CtxMod:stop(Pid)
-    end, nil, ?WORKERS),
+    ets:foldl(fun(Ctx, _) ->
+        #ctx{
+            ctx_id = CtxId,
+            js_ctx = JSCtx
+        } = Ctx,
+        ateles_util:destroy_ctx({CtxId, JSCtx})
+    end, nil, ?CONTEXTS),
     ok.
 
 
-handle_call({acquire, CtxId, CtxInfo}, {ClientPid, _Tag}, St) ->
+handle_call({acquire, CtxId, InitClosure}, {ClientPid, _Tag}, St) ->
     ?VALIDATE(acquire_start),
-    case acquire(CtxId, CtxInfo, St) of
-        {ok, Pid} ->
-            ets:update_counter(?WORKERS, CtxId, {#worker.ref_count, 1}),
+    case acquire_int(CtxId, InitClosure, St) of
+        {ok, JSCtx} ->
+            ets:update_counter(?CONTEXTS, CtxId, {#ctx.ref_count, 1}),
             Pattern = #client{pid = ClientPid, ctx_id = CtxId, _ = '_'},
             Client0 = case ets:match_object(?CLIENTS, Pattern) of
                 [] ->
@@ -119,24 +117,24 @@ handle_call({acquire, CtxId, CtxInfo}, {ClientPid, _Tag}, St) ->
             },
             ets:insert(?CLIENTS, Client1),
             ?VALIDATE(acquire_success),
-            {reply, {ok, {CtxId, Pid}}, St};
+            {reply, {ok, {CtxId, JSCtx}}, St};
         Error ->
             ?VALIDATE(acquire_error),
             {reply, Error, St}
     end;
 
-handle_call({release, CtxId, CtxPid}, {ClientPid, _Tag}, St) ->
+handle_call({release, CtxId}, {ClientPid, _Tag}, St) ->
     ?VALIDATE(release_start),
 
-    WorkerPattern = #worker{ctx_id = CtxId, pid = CtxPid, _ = '_'},
-    case ets:match_object(?WORKERS, WorkerPattern) of
+    CtxPattern = #ctx{ctx_id = CtxId, _ = '_'},
+    case ets:match_object(?CONTEXTS, CtxPattern) of
         [] ->
             {reply, ok, St};
-        [_Worker] ->
+        [_Ctx] ->
             ClientPattern = #client{pid = ClientPid, ctx_id = CtxId, _ = '_'},
             [Client] = ets:match_object(?CLIENTS, ClientPattern),
 
-            release(Client, 1),
+            release_int(Client, 1),
             erlang:demonitor(Client#client.ref, [flush]),
 
             ?VALIDATE(release_end),
@@ -151,42 +149,12 @@ handle_cast(Msg, St) ->
     {stop, {bad_cast, Msg}, St}.
 
 
-handle_info({'EXIT', _CtxPid, normal}, St) ->
-    % This was a process that we asked to shutdown
-    % so it can be ignored.
-    ?VALIDATE(worker_exit_normal),
-    {noreply, St};
-
-handle_info({'EXIT', CtxPid, _Reason}, St) ->
-    ?VALIDATE(worker_exit_start),
-    [Worker] = ets:match_object(?WORKERS, #worker{pid = CtxPid, _ = '_'}),
-    #worker{
-        ctx_id = CtxId,
-        ref_count = RefCount,
-        last_use = LU
-    } = Worker,
-
-    ets:delete(?WORKERS, CtxId),
-
-    Clients = ets:match_object(?CLIENTS, #client{ctx_id = CtxId, _ = '_'}),
-    lists:foreach(fun(Client) ->
-        ets:delete_object(?CLIENTS, Client),
-        erlang:demonitor(Client#client.ref, [flush])
-    end, Clients),
-
-    if RefCount > 0 -> ok; true ->
-        ets:delete(?LRU, LU)
-    end,
-
-    ?VALIDATE(worker_exit_end),
-    {noreply, St};
-
 handle_info({'DOWN', _Ref, process, ClientPid, _Reason}, St) ->
     ?VALIDATE(client_down_start),
 
     Pattern = #client{pid = ClientPid, _ = '_'},
     lists:foreach(fun(Client) ->
-        release(Client, Client#client.ref_count),
+        release_int(Client, Client#client.ref_count),
         erlang:demonitor(Client#client.ref, [flush])
     end, ets:match_object(?CLIENTS, Pattern)),
 
@@ -201,42 +169,43 @@ code_change(_OldVsn, St, _Extra) ->
     {ok, St}.
 
 
-acquire(CtxId, {CtxMod, CtxArg}, #{max_workers := MaxWorkers} = St) ->
-    NumWorkers = ets:info(?WORKERS, size),
-    case ets:lookup(?WORKERS, CtxId) of
-        [#worker{pid = Pid, ref_count = N, last_use = undefined}] when N > 0 ->
-            {ok, Pid};
-        [#worker{pid = Pid, ref_count = 0, last_use = LU}] ->
-            ets:update_element(?WORKERS, CtxId, {#worker.last_use, undefined}),
+acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
+    NumContexts = ets:info(?CONTEXTS, size),
+    case ets:lookup(?CONTEXTS, CtxId) of
+        [#ctx{js_ctx=JSCtx, ref_count=N, last_use=undefined}] when N > 0 ->
+            {ok, JSCtx};
+        [#ctx{js_ctx=JSCtx, ref_count=0, last_use=LU}] ->
+            ets:update_element(?CONTEXTS, CtxId, {#ctx.last_use, undefined}),
             ets:delete(?LRU, LU),
-            {ok, Pid};
-        [] when NumWorkers < MaxWorkers ->
-            {ok, CtxPid} = CtxMod:start_link(CtxArg),
-            Worker = #worker{
+            {ok, JSCtx};
+        [] when NumContexts < MaxContexts ->
+            {ok, JSCtx} = ateles_util:new_js_ctx(),
+            Ctx = #ctx{
                 ctx_id = CtxId,
-                ctx_mod = CtxMod,
-                pid = CtxPid,
+                js_ctx = JSCtx,
                 ref_count = 0,
                 last_use = undefined
             },
-            ets:insert(?WORKERS, Worker),
-            {ok, CtxPid};
+            ets:insert(?CONTEXTS, Ctx),
+            InitClosure({CtxId, JSCtx}),
+            {ok, JSCtx};
         [] ->
-            case remove_worker() of
+            case remove_context() of
                 true ->
-                    acquire(CtxId, {CtxMod, CtxArg}, St);
+                    acquire_int(CtxId, InitClosure, St);
                 false ->
-                    {error, all_workers_active}
+                    {error, all_contexts_active}
             end
     end.
 
 
-release(#client{} = Client, Decrement) ->
+release_int(#client{} = Client, Decrement) ->
     #client{
         ctx_id = CtxId,
         ref_count = RefCount
     } = Client,
-    CtxRC = ets:update_counter(?WORKERS, CtxId, {#worker.ref_count, -1 * Decrement}),
+    DecOp = {#ctx.ref_count, -1 * Decrement},
+    CtxRC = ets:update_counter(?CONTEXTS, CtxId, DecOp),
     true = ets:delete_object(?CLIENTS, Client),
 
     if RefCount == Decrement -> ok; true ->
@@ -252,32 +221,31 @@ release(#client{} = Client, Decrement) ->
         % RefCount dropped below zero so place this context
         % into the removable pool
         LastUse = erlang:monotonic_time(),
-        ets:update_element(?WORKERS, CtxId, {#worker.last_use, LastUse}),
+        ets:update_element(?CONTEXTS, CtxId, {#ctx.last_use, LastUse}),
         ets:insert(?LRU, {LastUse, CtxId})
     end.
 
 
-remove_worker() ->
+remove_context() ->
     case ets:first(?LRU) of
         '$end_of_table' ->
             false;
         Timestamp ->
             [{_, CtxId}] = ets:lookup(?LRU, Timestamp),
-            [Worker] = ets:lookup(?WORKERS, CtxId),
-            #worker{
-                ctx_mod = CtxMod,
-                pid = CtxPid,
+            [Ctx] = ets:lookup(?CONTEXTS, CtxId),
+            #ctx{
+                js_ctx = JSCtx,
                 ref_count = 0
-            } = Worker,
-            CtxMod:stop(CtxPid),
-            ets:delete(?WORKERS, CtxId),
+            } = Ctx,
+            {ok, true} = ateles_util:destroy_ctx({CtxId, JSCtx}),
+            ets:delete(?CONTEXTS, CtxId),
             ets:delete(?LRU, Timestamp),
             true
     end.
 
 
-max_workers() ->
-    config:get_integer("ateles", "max_workers", ?MAX_WORKERS).
+max_contexts() ->
+    config:get_integer("ateles", "max_contexts", ?MAX_CONTEXTS).
 
 
 -ifdef(TEST).
@@ -300,24 +268,24 @@ validate_tables() ->
         maps:update_with(CtxId, fun(RC) -> RC + RefCount end, RefCount, Acc)
     end, #{}, ?CLIENTS),
 
-    % Assert any ref count in ?WORKERS matches
+    % Assert any ref count in ?CONTEXTS matches
     % the value found in ?CLIENTS
-    ets:foldl(fun(Worker, _) ->
-        #worker{
+    ets:foldl(fun(Ctx, _) ->
+        #ctx{
             ctx_id = CtxId,
             ref_count = RefCount
-        } = Worker,
+        } = Ctx,
         true = RefCount >= 0,
         RefCount = maps:get(CtxId, RefCounts, 0)
-    end, nil, ?WORKERS),
+    end, nil, ?CONTEXTS),
 
     % Assert any ref count discovered in ?CLIENTS
-    % is accurate in ?WORKERS
+    % is accurate in ?CONTEXTS
     maps:fold(fun(CtxId, RefCount, _) ->
-        [Worker] = ets:lookup(?WORKERS, CtxId),
-        #worker{
+        [Ctx] = ets:lookup(?CONTEXTS, CtxId),
+        #ctx{
             ref_count = RC
-        } = Worker,
+        } = Ctx,
         RC = RefCount
     end, nil, RefCounts),
 
@@ -330,27 +298,27 @@ validate_tables() ->
         [Pair | Acc]
     end, [], ?CLIENTS),
 
-    % If a worker has a ref count of 0, it must have
+    % If a context has a ref count of 0, it must have
     % a timestamp set in the LRU
-    ets:foldl(fun(Worker, _) ->
-        case Worker of
-            #worker{ctx_id = CtxId, ref_count = 0, last_use = LU} ->
+    ets:foldl(fun(Ctx, _) ->
+        case Ctx of
+            #ctx{ctx_id = CtxId, ref_count = 0, last_use = LU} ->
                 [{LU, CtxId}] = ets:lookup(?LRU, LU);
-            #worker{ref_count = N, last_use = undefined} when N > 0 ->
+            #ctx{ref_count = N, last_use = undefined} when N > 0 ->
                 ok
         end
-    end, nil, ?WORKERS),
+    end, nil, ?CONTEXTS),
 
     % Assert every entry in the LRU has a ref count
-    % of zero in ?WORKERS and ?CLIENTS. The check for
+    % of zero in ?CONTEXTS and ?CLIENTS. The check for
     % ?CLIENTS relies on our previously computed
     % RefCounts map.
     ets:foldl(fun({LU, CtxId}, _) ->
-        [Worker] = ets:lookup(?WORKERS, CtxId),
-        #worker{
+        [Ctx] = ets:lookup(?CONTEXTS, CtxId),
+        #ctx{
             ref_count = 0,
             last_use = LU
-        } = Worker,
+        } = Ctx,
         false = maps:is_key(CtxId, RefCounts)
     end, nil, ?LRU),
 

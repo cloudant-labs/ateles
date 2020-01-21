@@ -19,9 +19,12 @@
 -define(TDEF(A), {atom_to_list(A), fun A/0}).
 
 
--define(WORKERS, ateles_server_workers).
+-define(CONTEXTS, ateles_server_contextss).
 -define(CLIENTS, ateles_server_clients).
 -define(LRU, ateles_server_lru).
+
+-define(CTX_ID, '$test_context$').
+-define(INIT_CLOSURE, fun(_) -> ok end).
 
 
 acquire_release_test_() ->
@@ -39,36 +42,22 @@ acquire_release_test_() ->
     }.
 
 
-ctx_opts() ->
-    #{
-        db_name => <<"foo">>,
-        sig => <<"bar">>,
-        lib => {[]},
-        map_funs => [<<"function(doc) {}">>]
-    }.
-
-
 acquire_release() ->
-    {ok, Ctx} = ateles:acquire_map_context(ctx_opts()),
-
+    {ok, Ctx} = ateles_server:acquire(?CTX_ID, ?INIT_CLOSURE),
     ?assertEqual(1, length(ets:lookup(?CLIENTS, self()))),
-
-    ok = ateles:release_map_context(Ctx),
-
+    ok = ateles_server:release(Ctx),
     ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
 
 
 acquire_multiple() ->
-    {ok, Ctx1} = ateles:acquire_map_context(ctx_opts()),
-    {ok, Ctx2} = ateles:acquire_map_context(ctx_opts()),
+    {ok, Ctx1} = ateles_server:acquire(?CTX_ID, ?INIT_CLOSURE),
+    {ok, Ctx2} = ateles_server:acquire(?CTX_ID, ?INIT_CLOSURE),
 
+    ?assertEqual(Ctx1, Ctx2),
     ?assertEqual(1, length(ets:lookup(?CLIENTS, self()))),
 
-    ok = ateles:release_map_context(Ctx1),
-
+    ok = ateles_server:release(Ctx1),
     ?assertEqual(1, length(ets:lookup(?CLIENTS, self()))),
 
-    ok = ateles:release_map_context(Ctx2),
-
+    ok = ateles_server:release(Ctx2),
     ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
-
