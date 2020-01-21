@@ -18,7 +18,7 @@ function init(libJSON, mapFunsJSON) {
         return JSON.stringify(ret);
     }
 
-    return JSON.stringify(true);
+    return true;
 }
 
 let doc_results = [];
@@ -43,5 +43,5 @@ function mapDoc(docJSON) {
         return mapEach(mapFun, doc);
     });
 
-    return JSON.stringify(mapResults);
+    return mapResults;
 }

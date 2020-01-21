@@ -14,35 +14,27 @@
 -behaviour(application).
 
 
+-include_lib("kernel/include/inet.hrl").
+
+
 -export([
     start/2,
     stop/1
 ]).
 
 
--include_lib("kernel/include/inet.hrl").
-
-
 start(_, _) ->
-    {ok, _} = application:ensure_all_started(grpcbox),
+    application:set_env(ateles, endpoints, get_endpoints()),
     case application:get_env(fabric, eunit_run) of
         {ok, true} ->
             ateles_util:ensure_server();
         _ ->
             ok
     end,
-    Endpoints = get_endpoints(),
-    {ok, Pid} = grpcbox_channel_sup:start_child(ateles, Endpoints, #{}),
-    ok = application:set_env(ateles, channel_pid, Pid),
     ateles_sup:start_link().
 
 
 stop(_) ->
-    {ok, Pid} = application:get_env(ateles, channel_pid),
-    case is_pid(Pid) andalso is_process_alive(Pid) of
-        true -> grpcbox_channel:stop(Pid);
-        false -> ok
-    end,
     ok.
 
 
@@ -53,7 +45,7 @@ get_endpoints() ->
             discover_endpoints();
         _ ->
             Port = config:get_integer("ateles", "service_port", 8444),
-            [{http, Host, Port, []}]
+            [to_conn_str(Host, Port)]
     end.
 
 
@@ -62,8 +54,13 @@ discover_endpoints() ->
     case inet_res:getbyname(DNSName, srv) of
         {ok, #hostent{h_addr_list = AddrList}} ->
             lists:map(fun({_Priority, _Weight, Port, Host}) ->
-                {http, Host, Port, []}
+                to_conn_str(Host, Port)
             end, AddrList);
         {error, Reason} ->
             erlang:error({service_lookup_failed, Reason})
     end.
+
+
+to_conn_str(Host, Port) ->
+    Str = io_lib:format("https://~s:~b", [Host, Port]),
+    lists:flatten(Str).

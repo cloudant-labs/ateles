@@ -35,38 +35,15 @@ basic_test_() ->
 
 
 eval_code() ->
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    Req = #{
-        action => 0,
-        script => <<"var x = 2; x;">>,
-        args => [<<"file=foo">>, <<"line=1">>]
-    },
-    ok = grpcbox_client:send(Stream, Req),
-    {ok, Result} = grpcbox_client:recv_data(Stream),
-    ?assertEqual(#{status => 0, result => <<"2">>}, Result),
-    grpcbox_client:close_and_recv(Stream).
+    {ok, Ctx} = ateles_util:create_test_ctx(),
+    Script = <<"var x = 2; x;">>,
+    {ok, 2} = ateles_util:eval(Ctx, <<"foo.js">>, Script),
+    {ok, _} = ateles_util:destroy_ctx(Ctx).
 
 
 call_function() ->
-    {ok, Stream} = ateles_client:execute(#{channel => ateles}),
-    Req1 = #{
-        action => 0,
-        script => <<"function double(x) {return x * 2;};">>,
-        args => []
-    },
-    ok = grpcbox_client:send(Stream, Req1),
-    {ok, Result1} = grpcbox_client:recv_data(Stream),
-    ?assertMatch(#{status := 0, result := <<_/binary>>}, Result1),
-
-    Req2 = #{
-        action => 1,
-        script => <<"double">>,
-        args => [<<"2">>]
-    },
-
-    ok = grpcbox_client:send(Stream, Req2),
-    {ok, Result2} = grpcbox_client:recv_data(Stream),
-    ?assertEqual(#{status => 0, result => <<"4">>}, Result2),
-    grpcbox_client:close_and_recv(Stream).
-
-
+    {ok, Ctx} = ateles_util:create_test_ctx(),
+    Script = <<"function double(x) {return x * 2;};">>,
+    {ok, _} = ateles_util:eval(Ctx, <<"foo.js">>, Script),
+    {ok, 4} = ateles_util:call(Ctx, <<"double">>, [2]),
+    {ok, _} = ateles_util:destroy_ctx(Ctx).

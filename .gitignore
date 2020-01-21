@@ -3,8 +3,10 @@
 _build
 deps
 ebin
+*.pem
 
 coverage/
+out/
 
 erl_crash.dump
 rebar3.crashdump
@@ -14,7 +16,4 @@ default.profraw
 
 priv/ateles
 
-src/ateles_client.erl
 src/ateles_pb.erl
-src/grpc_health_v_1_health_client.erl
-src/health_pb.erl

@@ -15,14 +15,45 @@ project (ateles)
 
 # Configure dependencies
 # Eventually we'll want to expand the mozjs version range
+set(Boost_USE_STATIC_LIBS ON)
+set(Boost_USE_MULTITHREADED ON)
+set(Boost_USE_STATIC_RUNTIME OFF)
+find_package(Boost 1.72 COMPONENTS thread)
+
+if(Boost_FOUND)
+    message(STATUS "Boost include dir ${Boost_INCLUDE_DIRS}")
+    message(STATUS "Boost librarise ${Boost_LIBRARIES}")
+else()
+    message(STATUS "Building boost 1.72")
+    include(ExternalProject)
+    ExternalProject_add(boost
+        URL "https://dl.bintray.com/boostorg/release/1.72.0/source/boost_1_72_0.tar.bz2"
+        URL_HASH SHA256=59c9b274bc451cf91a9ba1dd2c7fdcaf5d60b1b3aa83f2c9fa143417cc660722
+        DOWNLOAD_NO_PROGRESS ON
+        CONFIGURE_COMMAND ./bootstrap.sh --with-libraries=thread
+        BUILD_COMMAND ./b2
+        BUILD_IN_SOURCE ON
+        INSTALL_COMMAND ""
+        UPDATE_COMMAND ""
+        BUILD_BYPRODUCTS <SOURCE_DIR>/stage/lib/libboost_thread.a
+    )
+
+    ExternalProject_Get_property(boost SOURCE_DIR)
+    ExternalProject_Get_Property(boost BINARY_DIR)
+
+    set(Boost_INCLUDE_DIRS ${SOURCE_DIR})
+    set(Boost_LIBRARIES ${BINARY_DIR}/stage/lib/libboost_thread.a)
+
+    message(STATUS "Boost include dir ${Boost_INCLUDE_DIRS}")
+    message(STATUS "Boost libraries ${Boost_LIBRARIES}")
+endif()
+
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(MOZJS REQUIRED mozjs-60)
+pkg_check_modules(OPENSSL REQUIRED openssl)
 pkg_check_modules(PROTOBUF REQUIRED protobuf)
-pkg_check_modules(GRPC REQUIRED grpc++)
-pkg_check_modules(GPR REQUIRED gpr)
 
 find_program(PROTOC protoc)
-find_program(GRPC_PLUGIN grpc_cpp_plugin)
 find_program(PYTHON python)
 
 option(ENABLE_COVERAGE "Build for code coverage reports" OFF)
@@ -36,91 +67,54 @@ endif()
 set(PROTO_DIR ${CMAKE_CURRENT_SOURCE_DIR}/proto)
 set(ATELES_PB_SRC ${PROTO_DIR}/ateles.proto)
 set(ATELES_PB ${CMAKE_CURRENT_BINARY_DIR}/ateles.pb.cc)
-set(ATELES_GRPC ${CMAKE_CURRENT_BINARY_DIR}/ateles.grpc.pb.cc)
-set(HEALTH_PB_SRC ${PROTO_DIR}/health.proto)
-set(HEALTH_PB ${CMAKE_CURRENT_BINARY_DIR}/health.pb.cc)
-set(HEALTH_GRPC ${CMAKE_CURRENT_BINARY_DIR}/health.grpc.pb.cc)
 
 add_custom_command (
     OUTPUT ${ATELES_PB}
     COMMAND ${PROTOC}
         -I ${PROTO_DIR}
         --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
-        ateles.proto
+        ${ATELES_PB_SRC}
     DEPENDS ${ATELES_PB_SRC}
-)
-
-add_custom_command(
-    OUTPUT ${ATELES_GRPC}
-    COMMAND ${PROTOC}
-        -I ${PROTO_DIR}
-        --grpc_out=${CMAKE_CURRENT_BINARY_DIR}
-        --plugin=protoc-gen-grpc=${GRPC_PLUGIN}
-        ateles.proto
-    DEPENDS ${ATELES_PB_SRC}
-)
-
-add_custom_command (
-    OUTPUT ${HEALTH_PB}
-    COMMAND ${PROTOC}
-        -I ${PROTO_DIR}
-        --cpp_out=${CMAKE_CURRENT_BINARY_DIR}
-        health.proto
-    DEPENDS ${HEALTH_PB_SRC}
-)
-
-add_custom_command(
-    OUTPUT ${HEALTH_GRPC}
-    COMMAND ${PROTOC}
-        -I ${PROTO_DIR}
-        --grpc_out=${CMAKE_CURRENT_BINARY_DIR}
-        --plugin=protoc-gen-grpc=${GRPC_PLUGIN}
-        health.proto
-    DEPENDS ${HEALTH_PB_SRC}
 )
 
 file(GLOB SRC "c_src/*.cc")
 add_executable(
     ateles
     ${ATELES_PB}
-    ${ATELES_GRPC}
-    ${HEALTH_PB}
-    ${HEALTH_GRPC}
     ${SRC})
 
 set(CFLAGS
     -g
     -std=c++14
+    -fvisibility=hidden
     -Wall
     -Werror
     ${MOZJS_CFLAGS}
+    ${OPENSSL_CFLAGS}
     ${PROTOBUF_CFLAGS}
-    ${GRPC_CFLAGS}
-    ${GPR_CFLAGS}
     ${COVERAGE_OPTS})
 
-set_source_files_properties(
-    ateles.grpc.pb.cc
-    health.grpc.pb.cc
-    c_src/server.cc
-    PROPERTIES
-       COMPILE_FLAGS -Wno-deprecated-declarations
-)
+# set_source_files_properties(
+#     c_src/server.cc
+#     PROPERTIES
+#        COMPILE_FLAGS -Wno-deprecated-declarations
+# )
 
 set(INCLUDES
     ${CMAKE_CURRENT_BINARY_DIR}
+    ${Boost_INCLUDE_DIRS}
     ${MOZJS_INCLUDE_DIRS}
-    ${PROTOBUF_INCLUDE_DIRS}
-    ${GRPC_INCLUDE_DIRS}
-    ${GPR_INCLUDE_DIRS})
+    ${OPENSSL_INCLUDE_DIRS}
+    ${PROTOBUF_INCLUDE_DIRS})
 
 set(LDFLAGS
     ${MOZJS_LDFLAGS}
+    ${OPENSSL_LDFLAGS}
     ${PROTOBUF_LDFLAGS}
-    ${GRPC_LDFLAGS}
-    ${GPR_LDFLAGS}
     ${COVERAGE_OPTS})
 
 target_compile_options(ateles PUBLIC ${CFLAGS})
 target_include_directories(ateles PUBLIC ${INCLUDES})
-target_link_libraries(ateles ${LDFLAGS})
+target_link_libraries(ateles ${LDFLAGS} ${Boost_LIBRARIES})
+add_dependencies(ateles boost)
+

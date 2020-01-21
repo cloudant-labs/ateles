@@ -10,29 +10,18 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-syntax = "proto3";
+#include <boost/asio.hpp>
+#include <boost/asio/ssl.hpp>
+#include <boost/beast/core.hpp>
+#include <boost/beast/http.hpp>
+#include <boost/beast/ssl.hpp>
+#include <boost/beast/version.hpp>
+#include <boost/core/noncopyable.hpp>
+#include <memory>
 
-service Ateles {
-  rpc Execute(stream JSRequest) returns (stream JSResponse) {}
-}
-
-
-message JSRequest {
-    enum Action {
-        CREATE_CTX = 0;
-        DESTROY_CTX = 1;
-        EVAL = 2;
-        CALL = 3;
-    }
-    string context_id = 1;
-    Action action = 2;
-    string script = 3;
-    repeated string args = 4;
-    int32 timeout = 5;
-}
-
-
-message JSResponse {
-    int32 status = 1;
-    string result = 2;
-}
+namespace asio = boost::asio;
+namespace beast = boost::beast;
+namespace bsys = boost::system;
+namespace http = boost::beast::http;
+namespace ssl = boost::asio::ssl;
+using tcp = boost::asio::ip::tcp;

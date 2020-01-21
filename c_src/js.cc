@@ -12,15 +12,23 @@
 
 #include "js.h"
 
+#include <cassert>
 #include <sstream>
 
 #include "errors.h"
+#include "js/Conversions.h"
 
-#define ACTIVE_SLEEP_TIME_MSEC 100 // 100ms = 0.1s
-#define MAX_SLEEP_TIME_MSEC INT_MAX // A really long time ~25 days
+#define ACTIVE_SLEEP_TIME_MSEC 100   // 100ms = 0.1s
+#define MAX_SLEEP_TIME_MSEC INT_MAX  // A really long time ~25 days
 
-namespace ateles
-{
+std::string json_stringify(JSContext* cx, JS::HandleValue val);
+std::string js_to_string(JSContext* cx, JS::HandleValue val);
+JSString* string_to_js(JSContext* cx, const std::string& s);
+std::string format_string(JSContext* cx, JS::HandleString str);
+std::string format_value(JSContext* cx, JS::HandleValue val);
+std::string format_exception(JSContext* cx, JS::HandleValue exc);
+void load_script(JSContext* cx, std::string name, std::string source);
+
 static JSClassOps global_ops = {nullptr,
     nullptr,
     nullptr,
@@ -33,19 +41,16 @@ static JSClassOps global_ops = {nullptr,
     nullptr,
     JS_GlobalObjectTraceHook};
 
-
 /* The class of the global object. */
 static JSClass global_class = {"global", JSCLASS_GLOBAL_FLAGS, &global_ops};
-
 
 std::chrono::system_clock::duration
 wait_time(int msec_wait)
 {
     auto sec_wait = double(msec_wait) / 1000.0;
-    return std::chrono::duration_cast<std::chrono::system_clock::duration>
-            (std::chrono::duration<double>(sec_wait));
+    return std::chrono::duration_cast<std::chrono::system_clock::duration>(
+        std::chrono::duration<double>(sec_wait));
 }
-
 
 static bool
 print_fun(JSContext* cx, unsigned argc, JS::Value* vp)
@@ -58,7 +63,6 @@ print_fun(JSContext* cx, unsigned argc, JS::Value* vp)
 
     return true;
 }
-
 
 JSContext*
 create_jscontext(size_t max_mem)
@@ -84,7 +88,6 @@ create_jscontext(size_t max_mem)
     return cx;
 }
 
-
 bool
 check_timeout_shim(JSContext* jscx)
 {
@@ -92,18 +95,39 @@ check_timeout_shim(JSContext* jscx)
     return cx->check_timeout();
 }
 
-
-JSCx::JSCx(size_t max_mem) : _cx(create_jscontext(max_mem), JS_DestroyContext),
-        _wd_alive(true), _wd_active(false)
+JSCx::JSCx(size_t max_mem) :
+    _cx_mgr(create_jscontext(max_mem), JS_DestroyContext),
+    _wd_alive(true),
+    _wd_active(false)
 {
-    JS_SetContextPrivate(this->_cx.get(), this);
-    JS_AddInterruptCallback(this->_cx.get(), &check_timeout_shim);
+    this->_cx = this->_cx_mgr.get();
+
+    JS_SetContextPrivate(this->_cx, this);
+    JS_AddInterruptCallback(this->_cx, &check_timeout_shim);
+
+    JSAutoRequest ar(this->_cx);
+
+    JS::CompartmentOptions options;
+
+    JSObject* global = JS_NewGlobalObject(
+        this->_cx, &global_class, nullptr, JS::FireOnNewGlobalHook, options);
+
+    assert(global != nullptr && "error allocating new JS context");
+
+    this->_global.init(this->_cx, global);
+
+    JSAutoCompartment ac(this->_cx, this->_global);
+    JS_InitStandardClasses(this->_cx, this->_global);
+
+    JS::HandleObject global_obj(this->_global);
+    if(!JS_DefineFunction(this->_cx, global_obj, "print", print_fun, 1, 0)) {
+        throw AtelesInternalError("Error installing print function.");
+    }
 
     this->_wd_alive = true;
     this->_wd_active = false;
     this->_wd_thread = std::make_unique<std::thread>(&JSCx::wd_run, this);
 }
-
 
 JSCx::~JSCx()
 {
@@ -116,131 +140,8 @@ JSCx::~JSCx()
     this->_wd_thread->join();
 }
 
-
-std::unique_ptr<JSCompartment>
-JSCx::new_compartment()
-{
-    return std::make_unique<JSCompartment>(this, this->_cx.get());
-}
-
-
-void
-JSCx::set_timeout(int ms_timeout)
-{
-    this->_deadline = std::chrono::system_clock::now() + wait_time(ms_timeout);
-    this->_timed_out = false;
-}
-
-
-bool
-JSCx::check_timeout()
-{
-    if(std::chrono::system_clock::now() > this->_deadline) {
-        this->_timed_out = true;
-        return false;
-    }
-
-    return true;
-}
-
-
-bool
-JSCx::timed_out()
-{
-    return this->_timed_out;
-}
-
-
-void
-JSCx::set_watchdog_status(bool status)
-{
-    std::unique_lock<std::mutex> guard(this->_wd_lock);
-    this->_wd_active = status;
-    this->_wd_cv.notify_one();
-}
-
-
-void
-JSCx::wd_run()
-{
-    std::unique_lock<std::mutex> guard(this->_wd_lock);
-    std::chrono::system_clock::duration sleep_time;
-    while(this->_wd_alive) {
-        JS_RequestInterruptCallback(this->_cx.get());
-
-        if(this->_wd_active) {
-            sleep_time = wait_time(ACTIVE_SLEEP_TIME_MSEC);
-        } else {
-            sleep_time = wait_time(MAX_SLEEP_TIME_MSEC);
-        }
-
-        this->_wd_cv.wait_for(guard, sleep_time);
-    }
-}
-
-
-JSCxAutoTimeout::JSCxAutoTimeout(JSCx* cx, int ms_timeout) : _cx(cx)
-{
-    this->_cx->set_timeout(ms_timeout);
-    this->_cx->set_watchdog_status(true);
-}
-
-
-JSCxAutoTimeout::~JSCxAutoTimeout()
-{
-    this->_cx->set_watchdog_status(false);
-}
-
-
-JSCompartment::JSCompartment(JSCx* jscx, JSContext* cx) : _jscx(jscx), _cx(cx)
-{
-    JSAutoRequest ar(this->_cx);
-
-    JS::CompartmentOptions options;
-
-    JSObject* global = JS_NewGlobalObject(this->_cx,
-        &global_class,
-        nullptr,
-        JS::FireOnNewGlobalHook,
-        options);
-
-    if(global == nullptr) {
-        // Force garbage collection and retry creating
-        // the new compartment.
-        JS_GC(this->_cx);
-
-        global = JS_NewGlobalObject(this->_cx,
-            &global_class,
-            nullptr,
-            JS::FireOnNewGlobalHook,
-            options);
-
-        if(global == nullptr) {
-            throw AtelesResourceExhaustedError("Unable to allocate new global object.");
-        }
-    }
-
-    this->_global.init(this->_cx, global);
-
-    JSAutoCompartment ac(this->_cx, this->_global.get());
-    JS_InitStandardClasses(this->_cx, this->_global);
-
-    JS::HandleObject global_obj(this->_global);
-    if(!JS_DefineFunction(
-           this->_cx, global_obj, "print", print_fun, 1, 0)) {
-        throw AtelesInternalError("Error installing print function.");
-    }
-}
-
-
-JSCompartment::~JSCompartment()
-{
-    this->_global.reset();
-}
-
-
 std::string
-JSCompartment::eval(const std::string& script, std::vector<std::string>& args)
+JSCx::eval(const std::string& script, std::vector<std::string>& args)
 {
     JSAutoRequest ar(this->_cx);
     JSAutoCompartment ac(this->_cx, this->_global.get());
@@ -281,9 +182,8 @@ JSCompartment::eval(const std::string& script, std::vector<std::string>& args)
     if(!JS::Evaluate(this->_cx, opts, script.c_str(), script.size(), &rval)) {
         JS::RootedValue exc(this->_cx);
         if(!JS_GetPendingException(this->_cx, &exc)) {
-            if(this->_jscx->timed_out()) {
-                throw AtelesTimeoutError(
-                    "Time out evaluating script: " + file);
+            if(this->timed_out()) {
+                throw AtelesTimeoutError("Time out evaluating script: " + file);
             } else {
                 throw AtelesInternalError(
                     "Unknown error evaluating script: " + file);
@@ -295,12 +195,11 @@ JSCompartment::eval(const std::string& script, std::vector<std::string>& args)
         }
     }
 
-    return format_value(this->_cx, rval);
+    return json_stringify(this->_cx, rval);
 }
 
-
 std::string
-JSCompartment::call(const std::string& name, std::vector<std::string>& args)
+JSCx::call(const std::string& name, std::vector<std::string>& args)
 {
     JSAutoRequest ar(this->_cx);
     JSAutoCompartment ac(this->_cx, this->_global.get());
@@ -322,21 +221,272 @@ JSCompartment::call(const std::string& name, std::vector<std::string>& args)
     if(!JS::Call(this->_cx, this_obj, name.c_str(), jsargs, &rval)) {
         JS::RootedValue exc(this->_cx);
         if(!JS_GetPendingException(this->_cx, &exc)) {
-            if(this->_jscx->timed_out()) {
-                throw AtelesTimeoutError(
-                    "Time out calling function: " + name);
+            if(this->timed_out()) {
+                throw AtelesTimeoutError("Time out calling function: " + name);
             } else {
-                throw AtelesInternalError(
-                    "Unknown calling function.");
+                throw AtelesInternalError("Unknown calling function.");
             }
         } else {
             JS_ClearPendingException(this->_cx);
-            throw AtelesInvalidArgumentError("Error calling function: "
-                + format_exception(this->_cx, exc));
+            throw AtelesInvalidArgumentError(
+                "Error calling function: " + format_exception(this->_cx, exc));
         }
     }
 
-    return format_value(this->_cx, rval);
+    return json_stringify(this->_cx, rval);
 }
 
-}  // namespace ateles
+void
+JSCx::set_timeout(int ms_timeout)
+{
+    this->_deadline = std::chrono::system_clock::now() + wait_time(ms_timeout);
+    this->_timed_out = false;
+}
+
+bool
+JSCx::check_timeout()
+{
+    if(std::chrono::system_clock::now() > this->_deadline) {
+        this->_timed_out = true;
+        return false;
+    }
+
+    return true;
+}
+
+bool
+JSCx::timed_out()
+{
+    return this->_timed_out;
+}
+
+void
+JSCx::set_watchdog_status(bool status)
+{
+    std::unique_lock<std::mutex> guard(this->_wd_lock);
+    this->_wd_active = status;
+    this->_wd_cv.notify_one();
+}
+
+void
+JSCx::wd_run()
+{
+    std::unique_lock<std::mutex> guard(this->_wd_lock);
+    std::chrono::system_clock::duration sleep_time;
+    while(this->_wd_alive) {
+        JS_RequestInterruptCallback(this->_cx);
+
+        if(this->_wd_active) {
+            sleep_time = wait_time(ACTIVE_SLEEP_TIME_MSEC);
+        } else {
+            sleep_time = wait_time(MAX_SLEEP_TIME_MSEC);
+        }
+
+        this->_wd_cv.wait_for(guard, sleep_time);
+    }
+}
+
+JSCxAutoTimeout::JSCxAutoTimeout(JSCx* cx, int ms_timeout) : _cx(cx)
+{
+    this->_cx->set_timeout(ms_timeout);
+    this->_cx->set_watchdog_status(true);
+}
+
+JSCxAutoTimeout::~JSCxAutoTimeout()
+{
+    this->_cx->set_watchdog_status(false);
+}
+
+enum class PrintErrorKind
+{
+    Error,
+    Warning,
+    StrictWarning,
+    Note
+};
+
+static bool
+json_accumulate(const char16_t* in, uint32_t len, void* obj)
+{
+    std::vector<char16_t>* out = (std::vector<char16_t>*) obj;
+    out->insert(out->end(), in, in + len);
+    return true;
+}
+
+std::string
+json_stringify(JSContext* cx, JS::HandleValue val)
+{
+    JS::RootedValue tmp(cx, val);
+    JS::RootedValue indent(cx, JS::NumberValue(2));
+    std::vector<char16_t> buf;
+    bool ok = JS_Stringify(cx, &tmp, nullptr, indent, json_accumulate, &buf);
+    if(ok) {
+        JSString* str = JS_NewUCStringCopyN(cx, &(buf[0]), buf.size());
+        JS::RootedString rstr(cx, str);
+        return format_string(cx, rstr);
+    } else {
+        return "<invalid_json>";
+    }
+}
+
+std::string
+js_to_string(JSContext* cx, JS::HandleValue val)
+{
+    JS::RootedString sval(cx);
+    sval = val.toString();
+
+    JS::UniqueChars chars(JS_EncodeStringToUTF8(cx, sval));
+    if(!chars) {
+        JS_ClearPendingException(cx);
+        throw AtelesInvalidArgumentError("Error converting value to string.");
+    }
+
+    return chars.get();
+}
+
+JSString*
+string_to_js(JSContext* cx, const std::string& s)
+{
+    JSString* ret = JS_NewStringCopyN(cx, s.c_str(), s.size());
+    if(ret != nullptr) {
+        return ret;
+    }
+
+    throw AtelesResourceExhaustedError("Unable to allocate string object.");
+}
+
+std::string
+format_string(JSContext* cx, JS::HandleString str)
+{
+    std::string buf;
+
+    JS::UniqueChars chars(JS_EncodeStringToUTF8(cx, str));
+    if(!chars) {
+        JS_ClearPendingException(cx);
+        return "[invalid string]";
+    }
+
+    buf += chars.get();
+
+    return buf;
+}
+
+std::string
+format_value(JSContext* cx, JS::HandleValue val)
+{
+    JS::RootedString str(cx);
+
+    if(val.isString()) {
+        str = val.toString();
+        return format_string(cx, str);
+    }
+
+    str = JS::ToString(cx, val);
+
+    if(!str) {
+        JS_ClearPendingException(cx);
+        str = JS_ValueToSource(cx, val);
+    }
+
+    if(!str) {
+        JS_ClearPendingException(cx);
+        if(val.isObject()) {
+            const JSClass* klass = JS_GetClass(&val.toObject());
+            if(klass) {
+                str = JS_NewStringCopyZ(cx, klass->name);
+            } else {
+                return "[uknown object]";
+            }
+        } else {
+            return "[unknown non-object]";
+        }
+    }
+
+    if(!str) {
+        JS_ClearPendingException(cx);
+        return "[invalid class]";
+    }
+
+    JS::UniqueChars bytes(JS_EncodeStringToUTF8(cx, str));
+    if(!bytes) {
+        JS_ClearPendingException(cx);
+        return "[invalid string]";
+    }
+
+    return bytes.get();
+}
+
+std::string
+format_exception(JSContext* cx, JS::HandleValue exc)
+{
+    if(!exc.isObject()) {
+        return format_value(cx, exc);
+    }
+
+    JS::RootedObject exc_obj(cx, &exc.toObject());
+    JSErrorReport* report = JS_ErrorFromException(cx, exc_obj);
+
+    if(!report) {
+        return format_value(cx, exc);
+    }
+
+    std::ostringstream prefix;
+    if(report->filename) {
+        prefix << report->filename << ':';
+    }
+
+    if(report->lineno) {
+        prefix << report->lineno << ':' << report->column << ' ';
+    }
+
+    PrintErrorKind kind = PrintErrorKind::Error;
+    if(JSREPORT_IS_WARNING(report->flags)) {
+        if(JSREPORT_IS_STRICT(report->flags)) {
+            kind = PrintErrorKind::StrictWarning;
+        } else {
+            kind = PrintErrorKind::Warning;
+        }
+    }
+
+    if(kind != PrintErrorKind::Error) {
+        const char* kindPrefix = nullptr;
+        switch(kind) {
+            case PrintErrorKind::Error:
+                MOZ_CRASH("unreachable");
+            case PrintErrorKind::Warning:
+                kindPrefix = "warning";
+                break;
+            case PrintErrorKind::StrictWarning:
+                kindPrefix = "strict warning";
+                break;
+            case PrintErrorKind::Note:
+                kindPrefix = "note";
+                break;
+        }
+
+        prefix << kindPrefix << ": ";
+    }
+
+    prefix << std::endl << report->message().c_str();
+
+    return prefix.str();
+}
+
+void
+load_script(JSContext* cx, std::string name, std::string source)
+{
+    JS::RootedValue rval(cx);
+    JS::CompileOptions opts(cx);
+    opts.setFileAndLine(name.c_str(), 1);
+    if(!JS::Evaluate(cx, opts, source.c_str(), source.size(), &rval)) {
+        JS::RootedValue exc(cx);
+        if(!JS_GetPendingException(cx, &exc)) {
+            throw AtelesInternalError(
+                "Unknown error evaluating script: " + name);
+        } else {
+            JS_ClearPendingException(cx);
+            throw AtelesInternalError(
+                "Error evaluating script: " + format_exception(cx, exc));
+        }
+    }
+}

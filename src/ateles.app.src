@@ -24,8 +24,8 @@
         config,
         couch,
         couch_eval,
-        grpcbox,
-        ctx
+        fron,
+        gpb
     ]},
     {env,[]},
     {licenses, ["Apache 2.0"]},
