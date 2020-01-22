@@ -119,7 +119,7 @@ handle_async_resp(Stream, Msg) ->
     case Msg of
         {fron_msg, Ref, MsgAcc} ->
             Resp = iolist_to_binary(lists:reverse(MsgAcc)),
-            case ateles_pb:decode_msg(Resp, js_response) of
+            case ateles_pb:decode_msg(Resp, 'JSResponse') of
                 #{status := 0, result := Result} ->
                     {ok, jiffy:decode(Result)};
                 #{status := Error, result := Result} ->
@@ -179,13 +179,13 @@ fron_prompt(Stream, Req) ->
 
 
 fron_send(Stream, Req) ->
-    Msg = ateles_pb:encode_msg(Req, js_request),
+    Msg = ateles_pb:encode_msg(Req, 'JSRequest'),
     fron:send(Stream, Msg).
 
 
 fron_recv(Stream) ->
     {ok, Resp} = fron:recv(Stream, infinity),
-    case ateles_pb:decode_msg(Resp, js_response) of
+    case ateles_pb:decode_msg(Resp, 'JSResponse') of
         #{status := 0, result := Result} ->
             {ok, jiffy:decode(Result)};
         #{status := Error, result := Result} ->
