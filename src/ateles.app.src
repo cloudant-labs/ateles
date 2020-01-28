@@ -24,7 +24,6 @@
         config,
         couch,
         couch_eval,
-        fron,
         gpb
     ]},
     {env,[]},
