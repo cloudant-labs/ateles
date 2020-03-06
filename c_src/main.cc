@@ -14,24 +14,7 @@
 #include "js/Initialization.h"
 #include "jsapi.h"
 #include "server.h"
-
-void
-parent_monitor(pid_t ppid)
-{
-    while(true) {
-        if(kill(ppid, 0) != 0) {
-            exit(4);
-        }
-        sleep(1);
-    }
-}
-
-void
-start_parent_monitor(int ppid)
-{
-    auto thread = std::make_unique<std::thread>(parent_monitor, ppid);
-    thread->detach();
-}
+#include "util.h"
 
 int
 main(int argc, char* argv[])
@@ -92,23 +75,24 @@ main(int argc, char* argv[])
         opts.num_threads = cfg["num-threads"].as<size_t>();
         opts.max_mem = cfg["max-mem"].as<size_t>();
 
+        init_signals();
+
         if(cfg.count("parent_pid")) {
             start_parent_monitor(cfg["parent_pid"].as<int>());
         }
 
-        try {
-            Server s(opts);
-            s.run();
-        } catch(std::exception& e) {
-            std::cerr << "EXCEPTION: " << e.what() << "\n";
-        }
+        Server s(opts);
+        s.run();
 
     } catch(cxxopts::OptionException& exc) {
         fprintf(stderr, "ERROR: %s\n", exc.what());
         exit(1);
     } catch(std::exception& exc) {
         fprintf(stderr, "ERROR: %s\n", exc.what());
-        exit(2);
+        show_stack(255);
+    } catch(...) {
+        fprintf(stderr, "UNKNOWN ERROR\r\n");
+        show_stack(255);
     }
 
     exit(0);
