@@ -11,6 +11,7 @@
 // the License.
 
 #include "server.h"
+#include "stats.h"
 
 #include "connection.h"
 
@@ -53,6 +54,8 @@ Listener::do_accept()
                 do_accept();
                 return;
             }
+
+            ATELES_STAT_ACCEPTS++;
 
             std::make_shared<Connection>(std::move(sock), _js_mgr)->start();
 

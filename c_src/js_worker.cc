@@ -11,6 +11,7 @@
 // the License.
 
 #include "js_worker.h"
+#include "stats.h"
 
 JSWorker::JSWorker(size_t max_mem) : _running(true)
 {
@@ -80,8 +81,10 @@ JSWorker::run_one(JSCx* jscx)
         } else if(req->action() == JSRequest::CALL) {
             resp = jscx->call(req->script(), args);
         }
+        ATELES_STAT_JS_SUCCESS++;
         msg->set_response(0, resp);
     } catch(AtelesError& error) {
+        ATELES_STAT_JS_ERROR++;
         msg->set_response(1, error.what());
     }
 

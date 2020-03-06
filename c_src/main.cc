@@ -14,6 +14,7 @@
 #include "js/Initialization.h"
 #include "jsapi.h"
 #include "server.h"
+#include "stats.h"
 #include "util.h"
 
 int
@@ -57,6 +58,11 @@ main(int argc, char* argv[])
             "parent_pid",
             "Parent pid to monitor.",
             cxxopts::value<int>()
+        },
+        {
+            "f,stats_frequency",
+            "Stats report frequency",
+            cxxopts::value<size_t>()
         }
     });
     // clang-format on
@@ -79,6 +85,10 @@ main(int argc, char* argv[])
 
         if(cfg.count("parent_pid")) {
             start_parent_monitor(cfg["parent_pid"].as<int>());
+        }
+
+        if(cfg.count("stats_frequency")) {
+            start_stats_reporter(cfg["stats_frequency"].as<size_t>());
         }
 
         Server s(opts);

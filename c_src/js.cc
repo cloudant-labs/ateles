@@ -17,6 +17,7 @@
 
 #include "errors.h"
 #include "js/Conversions.h"
+#include "stats.h"
 
 #define ACTIVE_SLEEP_TIME_MSEC 100   // 100ms = 0.1s
 #define MAX_SLEEP_TIME_MSEC INT_MAX  // A really long time ~25 days
@@ -127,6 +128,8 @@ JSCx::JSCx(size_t max_mem) :
     this->_wd_alive = true;
     this->_wd_active = false;
     this->_wd_thread = std::make_unique<std::thread>(&JSCx::wd_run, this);
+
+    ATELES_STAT_JS_CONTEXTS++;
 }
 
 JSCx::~JSCx()
@@ -138,6 +141,7 @@ JSCx::~JSCx()
         this->_wd_cv.notify_one();
     }
     this->_wd_thread->join();
+    ATELES_STAT_JS_CONTEXTS--;
 }
 
 std::string

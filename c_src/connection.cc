@@ -14,14 +14,20 @@
 
 #include <stdio.h>
 
+#include "stats.h"
+
 #define TRACE fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
 
 Connection::Connection(tcp::socket sock, JSManager& js_mgr) :
     _stream(std::move(sock)), _js_mgr(js_mgr)
 {
+    ATELES_STAT_OPEN_CONNS++;
 }
 
-Connection::~Connection() {}
+Connection::~Connection()
+{
+    ATELES_STAT_OPEN_CONNS--;
+}
 
 beast::tcp_stream::socket_type&
 Connection::socket()
@@ -51,6 +57,24 @@ Connection::respond(http::status code, std::string& body)
         ctype = "application/octet-stream";
     } else {
         ctype = "text/plain";
+    }
+
+    switch(code) {
+        case http::status::ok:
+            ATELES_STAT_HTTP_200++;
+            break;
+        case http::status::bad_request:
+            ATELES_STAT_HTTP_400++;
+            break;
+        case http::status::not_found:
+            ATELES_STAT_HTTP_404++;
+            break;
+        case http::status::method_not_allowed:
+            ATELES_STAT_HTTP_405++;
+            break;
+        default:
+            ATELES_STAT_HTTP_UNK++;
+            break;
     }
 
     RespPtr resp = std::make_shared<Response>(code, _req.version());
