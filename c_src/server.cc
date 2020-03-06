@@ -12,6 +12,7 @@
 
 #include "server.h"
 #include "stats.h"
+#include "util.h"
 
 #include "connection.h"
 
@@ -51,6 +52,7 @@ Listener::do_accept()
             }
 
             if(error) {
+                report_error("accept", error);
                 do_accept();
                 return;
             }

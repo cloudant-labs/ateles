@@ -12,9 +12,11 @@
 
 #include "connection.h"
 
+#include <errno.h>
 #include <stdio.h>
 
 #include "stats.h"
+#include "util.h"
 
 #define TRACE fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
 
@@ -110,6 +112,9 @@ Connection::do_read()
 
             if(ec == http::error::end_of_stream) {
                 return do_close();
+            } else if(ec) {
+                report_error("conn_read", ec);
+                return;
             }
 
             if(_req.method() == http::verb::get && _req.target() == "/Health") {
@@ -150,6 +155,7 @@ Connection::do_write(Connection::RespPtr resp)
             boost::ignore_unused(nwritten);
 
             if(ec) {
+                report_error("conn_write", ec);
                 return;
             }
 
@@ -170,4 +176,9 @@ Connection::do_close()
 
     beast::error_code ec;
     socket().shutdown(tcp::socket::shutdown_send, ec);
+
+    // Ignore closing a disconnected socket
+    if(ec && ec.value() != ENOTCONN) {
+        report_error("conn_close", ec);
+    }
 }
