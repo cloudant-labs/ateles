@@ -13,8 +13,12 @@
 #ifndef ATELES_UTIL_H
 #define ATELES_UTIL_H
 
+#include <boost/system/error_code.hpp>
+
 void init_signals();
 void show_stack(int sig);
 void start_parent_monitor(int ppid);
+
+void report_error(const char* opname, boost::system::error_code& ec);
 
 #endif  // Included util.h
