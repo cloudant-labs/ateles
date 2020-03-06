@@ -27,6 +27,7 @@ extern std::atomic<uint64_t> ATELES_STAT_HTTP_UNK;
 extern std::atomic<uint64_t> ATELES_STAT_JS_CONTEXTS;
 extern std::atomic<uint64_t> ATELES_STAT_JS_SUCCESS;
 extern std::atomic<uint64_t> ATELES_STAT_JS_ERROR;
+extern std::atomic<uint64_t> ATELES_STAT_JS_GC_BYTES;
 
 void start_stats_reporter(size_t freq);
 

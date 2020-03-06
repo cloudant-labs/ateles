@@ -52,6 +52,10 @@ class JSCx {
     bool _timed_out;
     bool _wd_alive;
     bool _wd_active;
+
+    // Memory reporting
+    void set_memory_gauge();
+    uint64_t _last_gc_bytes;
 };
 
 class JSCxAutoTimeout {
