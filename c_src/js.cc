@@ -99,7 +99,8 @@ check_timeout_shim(JSContext* jscx)
 JSCx::JSCx(size_t max_mem) :
     _cx_mgr(create_jscontext(max_mem), JS_DestroyContext),
     _wd_alive(true),
-    _wd_active(false)
+    _wd_active(false),
+    _last_gc_bytes(0)
 {
     this->_cx = this->_cx_mgr.get();
 
@@ -142,6 +143,7 @@ JSCx::~JSCx()
     }
     this->_wd_thread->join();
     ATELES_STAT_JS_CONTEXTS--;
+    ATELES_STAT_JS_GC_BYTES -= this->_last_gc_bytes;
 }
 
 std::string
@@ -199,6 +201,8 @@ JSCx::eval(const std::string& script, std::vector<std::string>& args)
         }
     }
 
+    set_memory_gauge();
+
     return json_stringify(this->_cx, rval);
 }
 
@@ -236,6 +240,8 @@ JSCx::call(const std::string& name, std::vector<std::string>& args)
                 "Error calling function: " + format_exception(this->_cx, exc));
         }
     }
+
+    set_memory_gauge();
 
     return json_stringify(this->_cx, rval);
 }
@@ -289,6 +295,16 @@ JSCx::wd_run()
         this->_wd_cv.wait_for(guard, sleep_time);
     }
 }
+
+
+void
+JSCx::set_memory_gauge()
+{
+    uint64_t curr_gc_bytes = JS_GetGCParameter(this->_cx, JSGC_BYTES);
+    ATELES_STAT_JS_GC_BYTES += (curr_gc_bytes - this->_last_gc_bytes);
+    this->_last_gc_bytes = curr_gc_bytes;
+}
+
 
 JSCxAutoTimeout::JSCxAutoTimeout(JSCx* cx, int ms_timeout) : _cx(cx)
 {

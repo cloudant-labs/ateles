@@ -31,6 +31,8 @@ std::atomic<uint64_t> ATELES_STAT_HTTP_UNK{0};
 std::atomic<uint64_t> ATELES_STAT_JS_CONTEXTS{0};
 std::atomic<uint64_t> ATELES_STAT_JS_SUCCESS{0};
 std::atomic<uint64_t> ATELES_STAT_JS_ERROR{0};
+std::atomic<uint64_t> ATELES_STAT_JS_GC_BYTES{0};
+
 
 static void
 report()
@@ -50,11 +52,12 @@ report()
     // Gauges, do not reset after reporting
     uint64_t open_conns = ATELES_STAT_OPEN_CONNS;
     uint64_t js_contexts = ATELES_STAT_JS_CONTEXTS;
+    uint64_t js_gc_bytes = ATELES_STAT_JS_GC_BYTES;
 
     const char* fmt = "stats: "
             "accepts:%llu open:%llu "
             "http 200:%llu 400:%llu 404:%llu 405:%llu unk:%llu "
-            "js ctx:%llu success:%llu error:%llu\n";
+            "js ctx:%llu success:%llu error:%llu gc_bytes:%llu\n";
 
     fprintf(
             stderr,
@@ -68,7 +71,8 @@ report()
             http_unk,
             js_contexts,
             js_success,
-            js_error
+            js_error,
+            js_gc_bytes
         );
 
     // Reset counters. Notice that setting to zero would
