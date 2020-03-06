@@ -27,7 +27,7 @@ Listener::Listener(ServerOpts& opts,
     _acceptor.open(ep.protocol());
     _acceptor.set_option(tcp::acceptor::reuse_address(true));
     _acceptor.bind(ep);
-    _acceptor.listen(asio::socket_base::max_listen_connections);
+    _acceptor.listen(-1);
 }
 
 void
