@@ -36,16 +36,17 @@
 
 new_js_ctx() ->
     EndPoint = get_endpoint(),
+    {ok, Pid} = ibrowse:spawn_link_worker_process(EndPoint),
     JSCtxId = couch_uuids:random(),
-    {ok, {EndPoint, JSCtxId}}.
+    {ok, {Pid, EndPoint, JSCtxId}}.
 
 
-create_ctx({_CtxId, {EndPoint, JSCtxId}}) ->
+create_ctx({_CtxId, {Pid, EndPoint, JSCtxId}}) ->
     Req = #{
         action => 'CREATE_CTX',
         context_id => JSCtxId
     },
-    prompt(EndPoint, Req).
+    prompt(Pid, EndPoint, Req).
 
 
 create_test_ctx() ->
@@ -54,19 +55,21 @@ create_test_ctx() ->
     {ok, {ignored, JSCtx}}.
 
 
-destroy_ctx({_CtxId, {EndPoint, JSCtxId}}) ->
+destroy_ctx({_CtxId, {Pid, EndPoint, JSCtxId}}) ->
     Req = #{
         action => 'DESTROY_CTX',
         context_id => JSCtxId
     },
-    prompt(EndPoint, Req).
+    Resp = prompt(Pid, EndPoint, Req),
+    ok = ibrowse:stop_worker_process(Pid),
+    Resp.
 
 
 eval(Ctx, FileName, Script) ->
     eval(Ctx, FileName, Script, 5000).
 
 
-eval({_CtxId, {EndPoint, JSCtxId}}, FileName, Script, Timeout) ->
+eval({_CtxId, {Pid, EndPoint, JSCtxId}}, FileName, Script, Timeout) ->
     Req = #{
         action => 'EVAL',
         context_id => JSCtxId,
@@ -77,14 +80,14 @@ eval({_CtxId, {EndPoint, JSCtxId}}, FileName, Script, Timeout) ->
         ],
         timeout => Timeout
     },
-    prompt(EndPoint, Req).
+    prompt(Pid, EndPoint, Req).
 
 
 call(Ctx, Function, Args) ->
     call(Ctx, Function, Args, 5000).
 
 
-call({_CtxId, {EndPoint, JSCtxId}}, Function, Args, Timeout) ->
+call({_CtxId, {Pid, EndPoint, JSCtxId}}, Function, Args, Timeout) ->
     Req = #{
         action => 'CALL',
         context_id => JSCtxId,
@@ -92,7 +95,7 @@ call({_CtxId, {EndPoint, JSCtxId}}, Function, Args, Timeout) ->
         args => lists:map(fun jiffy:encode/1, Args),
         timeout => Timeout
     },
-    prompt(EndPoint, Req).
+    prompt(Pid, EndPoint, Req).
 
 
 eval_file(Ctx, FileName) when is_list(FileName) ->
@@ -123,11 +126,11 @@ get_endpoint() ->
     end.
 
 
-prompt(EndPoint, Req) ->
+prompt(Pid, EndPoint, Req) ->
     URL = EndPoint ++ "/Ateles/Execute",
     ReqBin = ateles_pb:encode_msg(Req, 'JSRequest'),
     Opts = [{response_format, binary}],
-    case ibrowse:send_req(URL, [], post, ReqBin, Opts) of
+    case ibrowse:send_req_direct(Pid, URL, [], post, ReqBin, Opts) of
         {ok, "200", _Headers, RespBin} ->
             case ateles_pb:decode_msg(RespBin, 'JSResponse') of
                 #{status := 0, result := Result} ->
