@@ -49,6 +49,7 @@
 -record(ctx, {
     ctx_id,
     js_ctx,
+    http_pid,
     ref_count,
     last_use
 }).
@@ -161,6 +162,31 @@ handle_info({'DOWN', _Ref, process, ClientPid, _Reason}, St) ->
     ?VALIDATE(client_down_end),
     {noreply, St};
 
+handle_info({'EXIT', Pid, _Reason}, St) ->
+    ?VALIDATE(http_pid_exit_start),
+
+    CtxPattern = #ctx{http_pid = Pid, _ = '_'},
+    case ets:match_object(?CONTEXTS, CtxPattern) of
+        [#ctx{ctx_id = CtxId, last_use = undefined}] ->
+            ClientPattern = #client{ctx_id = CtxId, _ = '_'},
+            lists:foreach(fun(Client) ->
+                #client{
+                    ref = Ref
+                } = Client,
+                ets:delete_object(?CLIENTS, Client),
+                erlang:demonitor(Ref, [flush])
+            end, ets:match_object(?CLIENTS, ClientPattern)),
+            ets:delete(?CONTEXTS, CtxId);
+        [#ctx{ctx_id = CtxId, last_use = LU}] ->
+            ets:delete(?CONTEXTS, CtxId),
+            ets:delete(?LRU, LU);
+        [] ->
+            ok
+    end,
+
+    ?VALIDATE(http_pid_exit_end),
+    {noreply, St};
+
 handle_info(Msg, St) ->
     {stop, {bad_info, Msg}, St}.
 
@@ -179,10 +205,11 @@ acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
             ets:delete(?LRU, LU),
             {ok, JSCtx};
         [] when NumContexts < MaxContexts ->
-            {ok, JSCtx} = ateles_util:new_js_ctx(),
+            {ok, {HttpPid, _, _} = JSCtx} = ateles_util:new_js_ctx(),
             Ctx = #ctx{
                 ctx_id = CtxId,
                 js_ctx = JSCtx,
+                http_pid = HttpPid,
                 ref_count = 0,
                 last_use = undefined
             },
