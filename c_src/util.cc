@@ -64,17 +64,14 @@ start_parent_monitor(int ppid)
     thread->detach();
 }
 
-
 void
 report_error(const char* opname, boost::system::error_code& ec)
 {
     const char* fmt = "error: %s [%d] %s - %s\n";
-    fprintf(
-            stderr,
-            fmt,
-            opname,
-            ec.value(),
-            ec.category().name(),
-            ec.message().c_str()
-        );
+    fprintf(stderr,
+        fmt,
+        opname,
+        ec.value(),
+        ec.category().name(),
+        ec.message().c_str());
 }

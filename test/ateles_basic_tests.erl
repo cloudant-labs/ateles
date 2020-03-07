@@ -35,15 +35,15 @@ basic_test_() ->
 
 
 eval_code() ->
-    {ok, Ctx} = ateles_util:create_test_ctx(),
+    {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"var x = 2; x;">>,
-    {ok, 2} = ateles_util:eval(Ctx, <<"foo.js">>, Script),
-    {ok, _} = ateles_util:destroy_ctx(Ctx).
+    {ok, 2} = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script),
+    ok = ateles_util:destroy_ctx(Ctx).
 
 
 call_function() ->
-    {ok, Ctx} = ateles_util:create_test_ctx(),
+    {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"function double(x) {return x * 2;};">>,
-    {ok, _} = ateles_util:eval(Ctx, <<"foo.js">>, Script),
-    {ok, 4} = ateles_util:call(Ctx, <<"double">>, [2]),
-    {ok, _} = ateles_util:destroy_ctx(Ctx).
+    {ok, _} = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script),
+    {ok, 4} = ateles_util:call({test_ctx, Ctx}, <<"double">>, [2]),
+    ok = ateles_util:destroy_ctx(Ctx).

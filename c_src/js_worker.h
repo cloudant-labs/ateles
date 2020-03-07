@@ -23,14 +23,14 @@ class JSWorker {
   public:
     typedef std::shared_ptr<JSWorker> Ptr;
 
-    JSWorker(size_t max_mem);
+    JSWorker(size_t max_mem, bool rewriter = false);
 
     void stop();
 
     void submit(Message::Ptr message);
 
   private:
-    void run(size_t max_mem);
+    void run(size_t max_mem, bool rewriter);
     bool run_one(JSCx* jscx);
     Message::Ptr get_next_message();
 

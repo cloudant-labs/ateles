@@ -16,7 +16,7 @@
 #include <list>
 
 #include "common.h"
-#include "js_mgr.h"
+#include "js_worker.h"
 #include "message.h"
 
 class Connection : public std::enable_shared_from_this<Connection> {
@@ -26,7 +26,7 @@ class Connection : public std::enable_shared_from_this<Connection> {
     typedef http::response<http::string_body> Response;
     typedef std::shared_ptr<Response> RespPtr;
 
-    Connection(tcp::socket sock, JSManager& js_mgr);
+    Connection(tcp::socket sock, JSWorker::Ptr rewriter, size_t max_mem);
     ~Connection();
 
     beast::tcp_stream::socket_type& socket();
@@ -48,7 +48,9 @@ class Connection : public std::enable_shared_from_this<Connection> {
     beast::flat_buffer _buffer;
     Request _req;
 
-    JSManager& _js_mgr;
+    JSWorker::Ptr _rewriter;
+    JSWorker::Ptr _context;
+    size_t _max_mem;
 };
 
 #endif  // Included connection.h

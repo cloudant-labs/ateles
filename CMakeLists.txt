@@ -77,11 +77,44 @@ add_custom_command (
     DEPENDS ${ATELES_PB_SRC}
 )
 
+
+# Generate our JS data files
+set(MKHEADER ${CMAKE_CURRENT_SOURCE_DIR}/tools/mkheader.py)
+set(ESCODEGEN_SRC ${CMAKE_CURRENT_SOURCE_DIR}/priv/escodegen.js)
+set(ESCODEGEN_HDR ${CMAKE_CURRENT_BINARY_DIR}/escodegen.h)
+set(ESPRIMA_SRC ${CMAKE_CURRENT_SOURCE_DIR}/priv/esprima.js)
+set(ESPRIMA_HDR ${CMAKE_CURRENT_BINARY_DIR}/esprima.h)
+set(REWRITE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/priv/rewrite_fun.js)
+set(REWRITE_HDR ${CMAKE_CURRENT_BINARY_DIR}/rewrite_fun.h)
+
+
+add_custom_command(
+    OUTPUT ${ESCODEGEN_HDR}
+    COMMAND ${PYTHON} ${MKHEADER} ${ESCODEGEN_SRC} ${ESCODEGEN_HDR} escodegen
+    DEPENDS ${ESCODEGEN_SRC}
+)
+
+add_custom_command(
+    OUTPUT ${ESPRIMA_HDR}
+    COMMAND ${PYTHON} ${MKHEADER} ${ESPRIMA_SRC} ${ESPRIMA_HDR} esprima
+    DEPENDS ${ESPRIMA_SRC}
+)
+
+add_custom_command(
+    OUTPUT ${REWRITE_HDR}
+    COMMAND ${PYTHON} ${MKHEADER} ${REWRITE_SRC} ${REWRITE_HDR} rewrite_fun
+    DEPENDS ${REWRITE_SRC}
+)
+
+
 file(GLOB SRC "c_src/*.cc")
 add_executable(
     ateles
     ${ATELES_PB}
-    ${SRC})
+    ${SRC}
+    ${ESCODEGEN_HDR}
+    ${ESPRIMA_HDR}
+    ${REWRITE_HDR})
 
 set(CFLAGS
     -g

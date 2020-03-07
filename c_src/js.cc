@@ -16,7 +16,10 @@
 #include <sstream>
 
 #include "errors.h"
+#include "escodegen.h"
+#include "esprima.h"
 #include "js/Conversions.h"
+#include "rewrite_fun.h"
 #include "stats.h"
 
 #define ACTIVE_SLEEP_TIME_MSEC 100   // 100ms = 0.1s
@@ -96,7 +99,7 @@ check_timeout_shim(JSContext* jscx)
     return cx->check_timeout();
 }
 
-JSCx::JSCx(size_t max_mem) :
+JSCx::JSCx(size_t max_mem, bool rewriter) :
     _cx_mgr(create_jscontext(max_mem), JS_DestroyContext),
     _wd_alive(true),
     _wd_active(false),
@@ -124,6 +127,20 @@ JSCx::JSCx(size_t max_mem) :
     JS::HandleObject global_obj(this->_global);
     if(!JS_DefineFunction(this->_cx, global_obj, "print", print_fun, 1, 0)) {
         throw AtelesInternalError("Error installing print function.");
+    }
+
+    if(rewriter) {
+        std::string src((const char*) escodegen_data, escodegen_len);
+        std::vector<std::string> args = {"file=escodegen.js"};
+        this->eval(src, args);
+
+        src = std::string((const char*) esprima_data, esprima_len);
+        args = {"file=esprima.js"};
+        this->eval(src, args);
+
+        src = std::string((const char*) rewrite_fun_data, rewrite_fun_len);
+        args = {"file=rewrite_fun.js"};
+        this->eval(src, args);
     }
 
     this->_wd_alive = true;
@@ -296,7 +313,6 @@ JSCx::wd_run()
     }
 }
 
-
 void
 JSCx::set_memory_gauge()
 {
@@ -304,7 +320,6 @@ JSCx::set_memory_gauge()
     ATELES_STAT_JS_GC_BYTES += (curr_gc_bytes - this->_last_gc_bytes);
     this->_last_gc_bytes = curr_gc_bytes;
 }
-
 
 JSCxAutoTimeout::JSCxAutoTimeout(JSCx* cx, int ms_timeout) : _cx(cx)
 {

@@ -10,14 +10,13 @@
 // License for the specific language governing permissions and limitations under
 // the License.
 
-#include <time.h>
-#include <unistd.h>
-
-#include <thread>
-#include <memory>
-
 #include "stats.h"
 
+#include <memory>
+#include <thread>
+
+#include <time.h>
+#include <unistd.h>
 
 std::atomic<uint64_t> ATELES_STAT_ACCEPTS{0};
 std::atomic<uint64_t> ATELES_STAT_OPEN_CONNS{0};
@@ -32,7 +31,6 @@ std::atomic<uint64_t> ATELES_STAT_JS_CONTEXTS{0};
 std::atomic<uint64_t> ATELES_STAT_JS_SUCCESS{0};
 std::atomic<uint64_t> ATELES_STAT_JS_ERROR{0};
 std::atomic<uint64_t> ATELES_STAT_JS_GC_BYTES{0};
-
 
 static void
 report()
@@ -54,26 +52,25 @@ report()
     uint64_t js_contexts = ATELES_STAT_JS_CONTEXTS;
     uint64_t js_gc_bytes = ATELES_STAT_JS_GC_BYTES;
 
-    const char* fmt = "stats: "
-            "accepts:%llu open:%llu "
-            "http 200:%llu 400:%llu 404:%llu 405:%llu unk:%llu "
-            "js ctx:%llu success:%llu error:%llu gc_bytes:%llu\n";
+    const char* fmt =
+        "stats: "
+        "accepts:%llu open:%llu "
+        "http 200:%llu 400:%llu 404:%llu 405:%llu unk:%llu "
+        "js ctx:%llu success:%llu error:%llu gc_bytes:%llu\n";
 
-    fprintf(
-            stderr,
-            fmt,
-            accepts,
-            open_conns,
-            http_200,
-            http_400,
-            http_404,
-            http_405,
-            http_unk,
-            js_contexts,
-            js_success,
-            js_error,
-            js_gc_bytes
-        );
+    fprintf(stderr,
+        fmt,
+        accepts,
+        open_conns,
+        http_200,
+        http_400,
+        http_404,
+        http_405,
+        http_unk,
+        js_contexts,
+        js_success,
+        js_error,
+        js_gc_bytes);
 
     // Reset counters. Notice that setting to zero would
     // lose track of anything that happened while writing

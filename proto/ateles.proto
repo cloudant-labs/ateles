@@ -19,16 +19,14 @@ service Ateles {
 
 message JSRequest {
     enum Action {
-        CREATE_CTX = 0;
-        DESTROY_CTX = 1;
-        EVAL = 2;
-        CALL = 3;
+        REWRITE = 0;
+        EVAL = 1;
+        CALL = 2;
     }
-    string context_id = 1;
-    Action action = 2;
-    string script = 3;
-    repeated string args = 4;
-    int32 timeout = 5;
+    Action action = 1;
+    string script = 2;
+    repeated string args = 3;
+    int32 timeout = 4;
 }
 
 

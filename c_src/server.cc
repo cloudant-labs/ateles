@@ -11,15 +11,15 @@
 // the License.
 
 #include "server.h"
+
+#include "connection.h"
 #include "stats.h"
 #include "util.h"
 
-#include "connection.h"
-
 Listener::Listener(ServerOpts& opts,
     asio::io_context& io_ctx,
-    JSManager& js_mgr) :
-    _io_ctx(io_ctx), _acceptor(io_ctx), _js_mgr(js_mgr)
+    JSWorker::Ptr rewriter) :
+    _io_ctx(io_ctx), _acceptor(io_ctx), _rewriter(rewriter)
 {
     asio::ip::tcp::resolver r(_io_ctx);
     asio::ip::tcp::endpoint ep = *(r.resolve(opts.address, opts.port)).begin();
@@ -28,6 +28,8 @@ Listener::Listener(ServerOpts& opts,
     _acceptor.set_option(tcp::acceptor::reuse_address(true));
     _acceptor.bind(ep);
     _acceptor.listen(-1);
+
+    _max_mem = opts.max_mem;
 }
 
 void
@@ -59,7 +61,8 @@ Listener::do_accept()
 
             ATELES_STAT_ACCEPTS++;
 
-            std::make_shared<Connection>(std::move(sock), _js_mgr)->start();
+            std::make_shared<Connection>(std::move(sock), _rewriter, _max_mem)
+                ->start();
 
             do_accept();
         });
@@ -68,8 +71,8 @@ Listener::do_accept()
 Server::Server(ServerOpts& opts) :
     _io_ctx(opts.num_threads),
     _num_threads(opts.num_threads),
-    _js_mgr(opts.max_mem),
-    _listener(opts, _io_ctx, _js_mgr)
+    _rewriter(std::make_shared<JSWorker>(opts.max_mem, true)),
+    _listener(opts, _io_ctx, _rewriter)
 {
     _num_threads = std::max<size_t>(1, _num_threads);
     _listener.run();
