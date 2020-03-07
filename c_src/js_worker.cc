@@ -11,22 +11,26 @@
 // the License.
 
 #include "js_worker.h"
+
 #include "stats.h"
 
-JSWorker::JSWorker(size_t max_mem) : _running(true)
+JSWorker::JSWorker(size_t max_mem, bool rewriter) : _running(true)
 {
     boost::thread::attributes attrs;
     attrs.set_stack_size(8 * 1024 * 1024);
     this->_thread = std::make_unique<boost::thread>(
-        attrs, [this, max_mem] { this->run(max_mem); });
+        attrs, [this, max_mem, rewriter] { this->run(max_mem, rewriter); });
 }
 
 void
 JSWorker::stop()
 {
-    std::lock_guard<std::mutex> guard(_lock);
-    _running = false;
-    _cv.notify_one();
+    {
+        std::lock_guard<std::mutex> guard(_lock);
+        _running = false;
+        _cv.notify_one();
+    }
+    this->_thread->join();
 }
 
 void
@@ -42,9 +46,9 @@ JSWorker::submit(Message::Ptr message)
 }
 
 void
-JSWorker::run(size_t max_mem)
+JSWorker::run(size_t max_mem, bool rewriter)
 {
-    JSCx::Ptr jscx = std::make_unique<JSCx>(max_mem);
+    JSCx::Ptr jscx = std::make_unique<JSCx>(max_mem, rewriter);
     bool go = run_one(jscx.get());
     while(go) {
         go = run_one(jscx.get());
@@ -78,6 +82,8 @@ JSWorker::run_one(JSCx* jscx)
 
         if(req->action() == JSRequest::EVAL) {
             resp = jscx->eval(req->script(), args);
+        } else if(req->action() == JSRequest::REWRITE) {
+            resp = jscx->call(req->script(), args);
         } else if(req->action() == JSRequest::CALL) {
             resp = jscx->call(req->script(), args);
         }

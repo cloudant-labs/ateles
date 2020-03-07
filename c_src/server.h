@@ -17,7 +17,7 @@
 #include <set>
 
 #include "common.h"
-#include "js_mgr.h"
+#include "js_worker.h"
 
 class ServerOpts {
   public:
@@ -29,7 +29,9 @@ class ServerOpts {
 
 class Listener : public std::enable_shared_from_this<Listener> {
   public:
-    Listener(ServerOpts& opts, asio::io_context& io_ctx, JSManager& js_mgr);
+    Listener(ServerOpts& opts,
+        asio::io_context& io_ctx,
+        JSWorker::Ptr rewriter);
     void close();
     void run();
 
@@ -39,7 +41,8 @@ class Listener : public std::enable_shared_from_this<Listener> {
     asio::io_context& _io_ctx;
     tcp::acceptor _acceptor;
 
-    JSManager& _js_mgr;
+    JSWorker::Ptr _rewriter;
+    size_t _max_mem;
 };
 
 class Server : private boost::noncopyable {
@@ -54,7 +57,7 @@ class Server : private boost::noncopyable {
     size_t _num_threads;
     std::vector<std::thread> _io_threads;
 
-    JSManager _js_mgr;
+    JSWorker::Ptr _rewriter;
     Listener _listener;
 };
 

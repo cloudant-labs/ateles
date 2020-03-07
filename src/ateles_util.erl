@@ -15,12 +15,11 @@
 
 
 -export([
-    new_js_ctx/0,
-
-    create_ctx/1,
-    create_test_ctx/0,
+    create_ctx/0,
     destroy_ctx/1,
 
+    rewrite/2,
+    rewrite/3,
     eval/3,
     eval/4,
     call/3,
@@ -34,45 +33,46 @@
 
 
 
-new_js_ctx() ->
+create_ctx() ->
     EndPoint = get_endpoint(),
     {ok, Pid} = ibrowse:spawn_link_worker_process(EndPoint),
-    JSCtxId = couch_uuids:random(),
-    {ok, {Pid, EndPoint, JSCtxId}}.
+    {ok, {EndPoint, Pid}}.
 
 
-create_ctx({_CtxId, {Pid, EndPoint, JSCtxId}}) ->
+destroy_ctx({_EndPoint, Pid}) ->
+    ok = ibrowse:stop_worker_process(Pid).
+
+
+rewrite(Ctx, Sources) ->
+    rewrite(Ctx, Sources, 5000).
+
+
+rewrite({_CtxId, JSCtx}, Source, Timeout) when is_binary(Source) ->
     Req = #{
-        action => 'CREATE_CTX',
-        context_id => JSCtxId
+        action => 'REWRITE',
+        script => <<"rewriteFun">>,
+        args => [jiffy:encode(Source)],
+        timeout => Timeout
     },
-    prompt(Pid, EndPoint, Req).
+    prompt(JSCtx, Req);
 
-
-create_test_ctx() ->
-    {ok, JSCtx} = new_js_ctx(),
-    {ok, true} = create_ctx({ignored, JSCtx}),
-    {ok, {ignored, JSCtx}}.
-
-
-destroy_ctx({_CtxId, {Pid, EndPoint, JSCtxId}}) ->
+rewrite({_CtxId, JSCtx}, Sources, Timeout) when is_list(Sources) ->
     Req = #{
-        action => 'DESTROY_CTX',
-        context_id => JSCtxId
+        action => 'REWRITE',
+        script => <<"rewriteFuns">>,
+        args => [jiffy:encode(Sources)],
+        timeout => Timeout
     },
-    Resp = prompt(Pid, EndPoint, Req),
-    ok = ibrowse:stop_worker_process(Pid),
-    Resp.
+    prompt(JSCtx, Req).
 
 
 eval(Ctx, FileName, Script) ->
     eval(Ctx, FileName, Script, 5000).
 
 
-eval({_CtxId, {Pid, EndPoint, JSCtxId}}, FileName, Script, Timeout) ->
+eval({_CtxId, JSCtx}, FileName, Script, Timeout) ->
     Req = #{
         action => 'EVAL',
-        context_id => JSCtxId,
         script => Script,
         args => [
             list_to_binary("file=" ++ FileName),
@@ -80,22 +80,21 @@ eval({_CtxId, {Pid, EndPoint, JSCtxId}}, FileName, Script, Timeout) ->
         ],
         timeout => Timeout
     },
-    prompt(Pid, EndPoint, Req).
+    prompt(JSCtx, Req).
 
 
 call(Ctx, Function, Args) ->
     call(Ctx, Function, Args, 5000).
 
 
-call({_CtxId, {Pid, EndPoint, JSCtxId}}, Function, Args, Timeout) ->
+call({_CtxId, JSCtx}, Function, Args, Timeout) ->
     Req = #{
         action => 'CALL',
-        context_id => JSCtxId,
         script => Function,
         args => lists:map(fun jiffy:encode/1, Args),
         timeout => Timeout
     },
-    prompt(Pid, EndPoint, Req).
+    prompt(JSCtx, Req).
 
 
 eval_file(Ctx, FileName) when is_list(FileName) ->
@@ -126,7 +125,7 @@ get_endpoint() ->
     end.
 
 
-prompt(Pid, EndPoint, Req) ->
+prompt({EndPoint, Pid}, Req) ->
     URL = EndPoint ++ "/Ateles/Execute",
     ReqBin = ateles_pb:encode_msg(Req, 'JSRequest'),
     Opts = [{response_format, binary}],

@@ -27,7 +27,7 @@ class JSCx {
   public:
     typedef std::unique_ptr<JSCx> Ptr;
 
-    explicit JSCx(size_t max_mem);
+    explicit JSCx(size_t max_mem, bool rewriter);
     ~JSCx();
 
     std::string eval(const std::string& script, std::vector<std::string>& args);

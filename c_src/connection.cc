@@ -20,14 +20,19 @@
 
 #define TRACE fprintf(stderr, "%s:%d\n", __FUNCTION__, __LINE__);
 
-Connection::Connection(tcp::socket sock, JSManager& js_mgr) :
-    _stream(std::move(sock)), _js_mgr(js_mgr)
+Connection::Connection(tcp::socket sock,
+    JSWorker::Ptr rewriter,
+    size_t max_mem) :
+    _stream(std::move(sock)), _rewriter(rewriter), _max_mem(max_mem)
 {
     ATELES_STAT_OPEN_CONNS++;
 }
 
 Connection::~Connection()
 {
+    if(_context) {
+        _context->stop();
+    }
     ATELES_STAT_OPEN_CONNS--;
 }
 
@@ -137,7 +142,15 @@ Connection::do_read()
                 return;
             }
 
-            _js_mgr.submit(mesg);
+            auto req = mesg->get_request();
+            if(req->action() == JSRequest::REWRITE) {
+                _rewriter->submit(mesg);
+            } else {  // EVAL or CALL
+                if(!_context) {
+                    _context = std::make_shared<JSWorker>(_max_mem);
+                }
+                _context->submit(mesg);
+            }
         });
 }
 

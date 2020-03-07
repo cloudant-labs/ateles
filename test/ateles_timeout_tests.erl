@@ -36,25 +36,25 @@ timeout_test_() ->
 
 
 timeout_eval_default() ->
-    {ok, Ctx} = ateles_util:create_test_ctx(),
+    {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"(function() {while(1) {continue;}})();">>,
-    Result = ateles_util:eval(Ctx, <<"foo.js">>, Script, 0),
+    Result = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script, 0),
     ?assertMatch({error, {1, <<"Time out", _/binary>>}}, Result),
-    {ok, _} = ateles_util:destroy_ctx(Ctx).
+    ok = ateles_util:destroy_ctx(Ctx).
 
 
 timeout_eval_control() ->
-    {ok, Ctx} = ateles_util:create_test_ctx(),
+    {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"(function() {while(1) {continue;}})();">>,
-    Result = ateles_util:eval(Ctx, <<"foo.js">>, Script, 250),
+    Result = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script, 250),
     ?assertMatch({error, {1, <<"Time out", _/binary>>}}, Result),
-    {ok, _} = ateles_util:destroy_ctx(Ctx).
+    ok = ateles_util:destroy_ctx(Ctx).
 
 
 timeout_call() ->
-    {ok, Ctx} = ateles_util:create_test_ctx(),
+    {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"function wait() {var a = 1; while(true) {a += 1;}};">>,
-    {ok, _} = ateles_util:eval(Ctx, <<"foo.js">>, Script, 0),
-    Result = ateles_util:call(Ctx, <<"wait">>, [], 250),
+    {ok, _} = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script, 0),
+    Result = ateles_util:call({test_ctx, Ctx}, <<"wait">>, [], 250),
     ?assertMatch({error, {1, <<"Time out", _/binary>>}}, Result),
-    {ok, _} = ateles_util:destroy_ctx(Ctx).
+    ok = ateles_util:destroy_ctx(Ctx).

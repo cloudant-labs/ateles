@@ -205,7 +205,7 @@ acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
             ets:delete(?LRU, LU),
             {ok, JSCtx};
         [] when NumContexts < MaxContexts ->
-            {ok, {HttpPid, _, _} = JSCtx} = ateles_util:new_js_ctx(),
+            {ok, {_EndPoint, HttpPid} = JSCtx} = ateles_util:create_ctx(),
             Ctx = #ctx{
                 ctx_id = CtxId,
                 js_ctx = JSCtx,
@@ -264,7 +264,7 @@ remove_context() ->
                 js_ctx = JSCtx,
                 ref_count = 0
             } = Ctx,
-            {ok, true} = ateles_util:destroy_ctx({CtxId, JSCtx}),
+            ok = ateles_util:destroy_ctx(JSCtx),
             ets:delete(?CONTEXTS, CtxId),
             ets:delete(?LRU, Timestamp),
             true

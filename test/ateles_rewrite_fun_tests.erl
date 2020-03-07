@@ -27,8 +27,8 @@ rewrite_test_() ->
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
             [
-                %% ?TDEF(rewrite_simple),
-                %% ?TDEF(rewrite_all),
+                ?TDEF(rewrite_simple),
+                ?TDEF(rewrite_all),
                 ?TDEF(rewrite_valid)
             ]
         }
@@ -38,8 +38,7 @@ rewrite_test_() ->
 rewrite_simple() ->
     Function = <<"function(doc) {emit(null, null);}">>,
     Expect = <<"(function (doc) {\n    emit(null, null);\n});">>,
-    timer:sleep(2000),
-    {ok, Result} = ateles:rewrite(Function),
+    {ok, Result} = do_rewrite(Function),
     ?assertEqual(Expect, Result).
 
 
@@ -52,11 +51,21 @@ rewrite_all() ->
         <<"(function (doc) {\n    emit(null, null);\n});">>,
         <<"(function (bar) {\n    return;\n});">>
     ],
-    {ok, Result} = ateles:rewrite(Functions),
+    {ok, Result} = do_rewrite(Functions),
     ?assertEqual(Expect, Result).
 
 
 rewrite_valid() ->
     Function = <<"(function (doc) {\n    emit(null, null);\n});">>,
-    {ok, Result} = ateles:rewrite(Function),
+    {ok, Result} = do_rewrite(Function),
     ?assertEqual(Function, Result).
+
+
+do_rewrite(Function) ->
+    {ok, JSCtx} = ateles_util:create_ctx(),
+    try
+        ateles_util:rewrite({test_ctx, JSCtx}, Function)
+    after
+        ateles_util:destroy_ctx(JSCtx)
+    end.
+

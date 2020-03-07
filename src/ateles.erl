@@ -19,8 +19,6 @@
 
 
 -export([
-    rewrite/1,
-
     acquire_map_context/1,
     release_map_context/1,
     map_docs/2
@@ -35,17 +33,6 @@
 ]).
 
 
-rewrite(Source) when is_binary(Source) ->
-    with_rewrite_ctx(fun(JSCtx) ->
-        ateles_util:call(JSCtx, <<"rewriteFun">>, [Source])
-    end);
-
-rewrite(Sources) when is_list(Sources) ->
-    with_rewrite_ctx(fun(JSCtx) ->
-        ateles_util:call(JSCtx, <<"rewriteFuns">>, [Sources])
-    end).
-
-
 acquire_map_context(CtxOpts) ->
     #{
         db_name := DbName,
@@ -55,9 +42,8 @@ acquire_map_context(CtxOpts) ->
     } = CtxOpts,
     CtxId = <<DbName/binary, "-mapctx-", Sig/binary>>,
 
-    {ok, MapFuns} = rewrite(RawMapFuns),
     InitClosure = fun(Ctx) ->
-        {ok, true} = ateles_util:create_ctx(Ctx),
+        {ok, MapFuns} = ateles_util:rewrite(Ctx, RawMapFuns),
         {ok, _} = ateles_util:eval_file(Ctx, "map.js"),
         {ok, true} = ateles_util:call(Ctx, <<"init">>, [Lib, MapFuns])
     end,
@@ -84,21 +70,6 @@ map_docs(Ctx, Docs) ->
                 erlang:error(Reason)
         end
     end, Docs)}.
-
-
-with_rewrite_ctx(Fun) ->
-    InitClosure = fun(Ctx) ->
-        {ok, true} = ateles_util:create_ctx(Ctx),
-        lists:foreach(fun(FileName) ->
-            {ok, _} = ateles_util:eval_file(Ctx, FileName)
-        end, ?REWRITE_SOURCE_FILES)
-    end,
-    {ok, Ctx} = ateles_server:acquire(?REWRITE_CTX_ID, InitClosure),
-    try
-        Fun(Ctx)
-    after
-        ateles_server:release(Ctx)
-    end.
 
 
 pmap_docs(Fun, Items) ->
