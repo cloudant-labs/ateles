@@ -134,6 +134,7 @@ Connection::do_read()
 
             if(_req.method() != http::verb::post) {
                 respond(http::status::method_not_allowed, "Allowed: POST");
+                return;
             }
 
             Message::Ptr mesg = Message::create(self, _req.body());
