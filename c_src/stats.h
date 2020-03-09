@@ -13,6 +13,8 @@
 #ifndef ATELES_STATS_H
 #define ATELES_STATS_H
 
+#include <stddef.h>
+
 #include <atomic>
 
 extern std::atomic<uint64_t> ATELES_STAT_ACCEPTS;
