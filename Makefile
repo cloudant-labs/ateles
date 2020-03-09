@@ -33,7 +33,6 @@ server: init
 	@make -C _build -j4
 	@mkdir -p priv/
 	@cp _build/ateles priv/ateles
-	@priv/ateles -h > /dev/null 2>&1
 
 
 eunit: export ERL_AFLAGS = -config $(shell pwd)/test/eunit.config
