@@ -139,7 +139,11 @@ prompt({EndPoint, Pid}, Req) ->
 ensure_server() ->
     case application:get_env(ateles, server) of
         undefined ->
-            Pid = spawn(fun() -> run_server() end),
+            Self = self(),
+            Pid = spawn(fun() -> run_server(Self) end),
+            receive
+                {Pid, ready} -> ok
+            end,
             application:set_env(ateles, server, Pid);
         _ ->
             ok
@@ -160,8 +164,14 @@ run_server(Parent) ->
             <<"--parent_pid">>, list_to_binary(os:getpid())
         ]
     }],
-    ServerPort = erlang:open_port({spawn_executable, Command}, Args),
-    server_loop(ServerPort).
+    try
+        ServerPort = erlang:open_port({spawn_executable, Command}, Args),
+        Parent ! {self(), ready},
+        server_loop(ServerPort)
+    catch T:R ->
+        S = erlang:get_stacktrace(),
+        io:format(standard_error, "SERVER ERROR: ~p:~p~n~p~n~n", [T, R, S])
+    end.
 
 
 server_loop(Port) ->
