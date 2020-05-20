@@ -103,15 +103,7 @@ eval_file(Ctx, FileName) when is_list(FileName) ->
 
 
 load_file(FileName) when is_list(FileName) ->
-    PrivDir = case code:priv_dir(?MODULE) of
-        {error, _} ->
-            EbinDir = filename:dirname(code:which(?MODULE)),
-            AppPath = filename:dirname(EbinDir),
-            filename:join(AppPath, "priv");
-        PDir ->
-            PDir
-    end,
-    Path = filename:join(PrivDir, FileName),
+    Path = filename:join(priv_dir(), FileName),
     {ok, Data} = file:read_file(Path),
     Data.
 
@@ -154,17 +146,8 @@ ensure_server() ->
     end.
 
 
-run_server() ->
-    AppDir = case code:priv_dir(?MODULE) of
-        {error, _} ->
-            EbinDir = filename:dirname(code:which(?MODULE)),
-            filename:dirname(EbinDir);
-        Path ->
-            Path
-    end,
-    PrivDir = filename:join(AppDir, "priv"),
-
-    Command = filename:join(PrivDir, "ateles"),
+run_server(Parent) ->
+    Command = filename:join(priv_dir(), "ateles"),
     Host = config:get("ateles", "service_url", "127.0.0.1"),
     Port = config:get("atelese", "service_port", "8444"),
 
@@ -187,4 +170,15 @@ server_loop(Port) ->
             server_loop(Port);
         Error ->
             io:format(standard_error, "SERVER ERROR: ~p~n", [Error])
+    end.
+
+
+priv_dir() ->
+    case code:priv_dir(ateles) of
+        {error, _} ->
+            EbinDir = filename:dirname(code:which(?MODULE)),
+            AppPath = filename:dirname(EbinDir),
+            filename:join(AppPath, "priv");
+        PrivDir ->
+            PrivDir
     end.
