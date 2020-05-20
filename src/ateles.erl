@@ -44,8 +44,14 @@ acquire_map_context(CtxOpts) ->
 
     InitClosure = fun(Ctx) ->
         {ok, MapFuns} = ateles_util:rewrite(Ctx, RawMapFuns),
-        {ok, _} = ateles_util:eval_file(Ctx, "map.js"),
-        {ok, true} = ateles_util:call(Ctx, <<"init">>, [Lib, MapFuns])
+        case ateles_util:eval_file(Ctx, "map.js") of
+            {ok, _} ->
+                Args = [Lib, MapFuns],
+                {ok, true} = ateles_util:call(Ctx, <<"init">>, Args),
+                ok;
+            {error, _} = Error ->
+                Error
+        end
     end,
     ateles_server:acquire(CtxId, InitClosure).
 
