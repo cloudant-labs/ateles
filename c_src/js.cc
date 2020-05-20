@@ -103,7 +103,8 @@ JSCx::JSCx(size_t max_mem, bool rewriter) :
     _cx_mgr(create_jscontext(max_mem), JS_DestroyContext),
     _wd_alive(true),
     _wd_active(false),
-    _last_gc_bytes(0)
+    _last_gc_bytes(0),
+    _num_evals(0)
 {
     this->_cx = this->_cx_mgr.get();
 
@@ -197,6 +198,13 @@ JSCx::eval(const std::string& script, std::vector<std::string>& args)
         } else {
             throw AtelesInvalidArgumentError("Unknown eval option: " + key);
         }
+    }
+
+    // TODO: Remove this after we debug why
+    //       map.js is being loaded multiple times.
+    if(file == "map.js") {
+        _num_evals++;
+        fprintf(stderr, "xkcd: map.js loaded %d times: %p\n", _num_evals, this);
     }
 
     JS::RootedValue rval(this->_cx);
