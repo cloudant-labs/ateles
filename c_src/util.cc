@@ -68,6 +68,12 @@ void
 report_error(const char* opname, boost::system::error_code& ec)
 {
     const char* fmt = "error: %s [%d] %s - %s\n";
+
+    if(ec.value() == 1) {
+        // Don't log closures due to timeouts
+        return;
+    }
+
     fprintf(stderr,
         fmt,
         opname,
