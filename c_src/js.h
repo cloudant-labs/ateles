@@ -56,6 +56,10 @@ class JSCx {
     // Memory reporting
     void set_memory_gauge();
     uint64_t _last_gc_bytes;
+
+    // TODO: Remove after debugging why we're loading
+    //       map.js multiple times into a context.
+    int _num_evals;
 };
 
 class JSCxAutoTimeout {
