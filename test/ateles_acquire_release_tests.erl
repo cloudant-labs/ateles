@@ -36,7 +36,9 @@ acquire_release_test_() ->
             fun test_util:stop_couch/1,
             [
                 ?TDEF(acquire_release),
-                ?TDEF(acquire_multiple)
+                ?TDEF(acquire_multiple),
+                ?TDEF(acquire_error),
+                ?TDEF(acquire_exception)
             ]
         }
     }.
@@ -60,4 +62,22 @@ acquire_multiple() ->
     ?assertEqual(1, length(ets:lookup(?CLIENTS, self()))),
 
     ok = ateles_server:release(Ctx2),
+    ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
+
+
+acquire_error() ->
+    Init = fun(_) -> {error, on_purpose} end,
+    ?assertEqual(
+            {error, on_purpose},
+            ateles_server:acquire(error_id, Init)
+        ),
+    ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
+
+
+acquire_exception() ->
+    Init = fun(_) -> erlang:throw(on_purpose) end,
+    ?assertMatch(
+            {error, {throw, on_purpose, _}},
+            ateles_server:acquire(exception_id, Init)
+        ),
     ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).

@@ -213,9 +213,20 @@ acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
                 ref_count = 0,
                 last_use = undefined
             },
-            ets:insert(?CONTEXTS, Ctx),
-            InitClosure({CtxId, JSCtx}),
-            {ok, JSCtx};
+            try InitClosure({CtxId, JSCtx}) of
+                ok ->
+                    ets:insert(?CONTEXTS, Ctx),
+                    {ok, JSCtx};
+                {error, Reason} = Error ->
+                    Fmt = "Failed to initialize ateles context: ~p",
+                    couch_log:error(Fmt, [Reason]),
+                    Error
+            catch T:R ->
+                S = erlang:get_stacktrace(),
+                Fmt = "Failed to initialize ateles context: ~p",
+                couch_log:error(Fmt, [{T, R, S}]),
+                {error, {T, R, S}}
+            end;
         [] ->
             case remove_context() of
                 true ->
