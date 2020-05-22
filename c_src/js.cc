@@ -221,8 +221,10 @@ JSCx::eval(const std::string& script, std::vector<std::string>& args)
             }
         } else {
             JS_ClearPendingException(this->_cx);
-            throw AtelesInvalidArgumentError(
-                "Error evaluating script: " + format_exception(this->_cx, exc));
+            std::ostringstream ss;
+            ss << "Error evaluating script [" << this << "]: ";
+            ss << format_exception(this->_cx, exc);
+            throw AtelesInvalidArgumentError(ss.str());
         }
     }
 
@@ -257,12 +259,15 @@ JSCx::call(const std::string& name, std::vector<std::string>& args)
             if(this->timed_out()) {
                 throw AtelesTimeoutError("Time out calling function: " + name);
             } else {
-                throw AtelesInternalError("Unknown calling function.");
+                throw AtelesInternalError("Unknown error calling function.");
             }
         } else {
             JS_ClearPendingException(this->_cx);
-            throw AtelesInvalidArgumentError(
-                "Error calling function: " + format_exception(this->_cx, exc));
+            std::ostringstream ss;
+            ss << "Error calling function '" << name << "' ";
+            ss << "[" << this << "]: ";
+            ss << format_exception(this->_cx, exc);
+            throw AtelesInvalidArgumentError(ss.str());
         }
     }
 
