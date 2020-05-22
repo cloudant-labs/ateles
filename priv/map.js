@@ -1,5 +1,7 @@
 let lib = {};
-let map_funs = [];
+let mapFuns = [];
+let docResults = [];
+
 
 function init(libJSON, mapFunsJSON) {
     try {
@@ -21,17 +23,17 @@ function init(libJSON, mapFunsJSON) {
     return true;
 }
 
-let doc_results = [];
 
 function emit(key, value) {
-    doc_results.push([key, value]);
+    docResults.push([key, value]);
 }
+
 
 function mapEach(mapFun, doc) {
     try {
-        doc_results = [];
+        docResults = [];
         mapFun(doc);
-        return doc_results;
+        return docResults;
     } catch (ex) {
         return ex.toString();
     }
