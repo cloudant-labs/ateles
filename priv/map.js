@@ -40,6 +40,13 @@ function mapEach(mapFun, doc) {
 };
 
 function mapDoc(docJSON) {
+    if(mapFuns.length == 0) {
+        const ret = {
+            "error": "missing_map_functions",
+            "reason": "No map functions exist."
+        }
+        return JSON.stringify(ret);
+    }
     const doc = JSON.parse(docJSON);
     const mapResults = Array.from(mapFuns, (mapFun) => {
         return mapEach(mapFun, doc);
