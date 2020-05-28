@@ -60,16 +60,18 @@ release_map_context(Ctx) ->
     ateles_server:release(Ctx).
 
 
-map_docs(Ctx, Docs) ->
+map_docs({CtxId, _} = Ctx, Docs) ->
     {ok, pmap_docs(fun(Doc) ->
         Json = couch_doc:to_json_obj(Doc, []),
         case ateles_util:call(Ctx, <<"mapDoc">>, [Json]) of
             {ok, Results} ->
-                Tupled = lists:map(fun(ViewResults) ->
-                    lists:map(fun
-                        ([K, V]) -> {K, V};
-                        (Error) when is_binary(Error) -> Error
-                    end, ViewResults)
+                Tupled = lists:map(fun
+                    (ViewResults) when is_list(ViewResults) ->
+                        lists:map(fun([K, V]) -> {K, V} end, ViewResults);
+                    (Error) when is_binary(Error) ->
+                        Fmt = "Error mapping doc - ctx: ~s docid: ~s error: ~s",
+                        couch_log:info(Fmt, [CtxId, Doc#doc.id, Error]),
+                        []
                 end, Results),
                 {Doc#doc.id, Tupled};
             {error, Reason} ->

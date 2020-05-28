@@ -28,7 +28,8 @@ map_doc_test_() ->
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
             [
-                ?TDEF(map_single_doc)
+                ?TDEF(map_single_doc),
+                ?TDEF(map_doc_exception)
             ]
         }
     }.
@@ -48,5 +49,23 @@ single_fun_opts() ->
         lib => {[]},
         map_funs => [
             <<"function(doc) {emit(doc._id, null);}">>
+        ]
+    }.
+
+
+map_doc_exception() ->
+    {ok, Ctx} = ateles:acquire_map_context(exception_opts()),
+    {ok, Results} = ateles:map_docs(Ctx, [#doc{id = <<"foo">>}]),
+    ?assertEqual([{<<"foo">>, [[]]}], Results),
+    ok = ateles:release_map_context(Ctx).
+
+
+exception_opts() ->
+    #{
+        db_name => <<"dbname">>,
+        sig => <<"exception_sig">>,
+        lib => {[]},
+        map_funs => [
+            <<"function(doc) {throw(new Error(\"a message\"));}">>
         ]
     }.
