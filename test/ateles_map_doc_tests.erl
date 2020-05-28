@@ -29,7 +29,8 @@ map_doc_test_() ->
             fun test_util:stop_couch/1,
             [
                 ?TDEF(map_single_doc),
-                ?TDEF(map_doc_exception)
+                ?TDEF(map_doc_exception),
+                ?TDEF(map_no_funs)
             ]
         }
     }.
@@ -68,4 +69,22 @@ exception_opts() ->
         map_funs => [
             <<"function(doc) {throw(new Error(\"a message\"));}">>
         ]
+    }.
+
+
+map_no_funs() ->
+    {ok, Ctx} = ateles:acquire_map_context(no_funs_opts()),
+    ?assertError(
+            {map_docs, {{<<"missing_map_functions">>, _}, _}},
+            ateles:map_docs(Ctx, [#doc{id = <<"foo">>}])
+        ),
+    ok = ateles:release_map_context(Ctx).
+
+
+no_funs_opts() ->
+    #{
+        db_name => <<"dbname">>,
+        sig => <<"no_funs_sig">>,
+        lib => {[]},
+        map_funs => []
     }.

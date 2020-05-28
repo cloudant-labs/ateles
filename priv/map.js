@@ -7,8 +7,7 @@ function init(libJSON, mapFunsJSON) {
     try {
         lib = JSON.parse(libJSON);
     } catch (ex) {
-        const ret = {"error": "invalid_library", "reason": ex.toString()};
-        return JSON.stringify(ret);
+        return {"error": "invalid_library", "reason": ex.toString()};
     }
 
     try {
@@ -16,8 +15,7 @@ function init(libJSON, mapFunsJSON) {
             return eval(source)
         })
     } catch (ex) {
-        const ret = {"error": "invalid_map_functions", "reason": ex.toString()};
-        return JSON.stringify(ret);
+        return {"error": "invalid_map_functions", "reason": ex.toString()};
     }
 
     return true;
@@ -45,7 +43,7 @@ function mapDoc(docJSON) {
             "error": "missing_map_functions",
             "reason": "No map functions exist."
         }
-        return JSON.stringify(ret);
+        return ret;
     }
     const doc = JSON.parse(docJSON);
     const mapResults = Array.from(mapFuns, (mapFun) => {

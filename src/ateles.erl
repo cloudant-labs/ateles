@@ -64,6 +64,11 @@ map_docs({CtxId, _} = Ctx, Docs) ->
     {ok, pmap_docs(fun(Doc) ->
         Json = couch_doc:to_json_obj(Doc, []),
         case ateles_util:call(Ctx, <<"mapDoc">>, [Json]) of
+            {ok, {ErrorProps}} when is_list(ErrorProps) ->
+                Error = fabric2_util:get_value(<<"error">>, ErrorProps),
+                Reason = fabric2_util:get_value(<<"reason">>, ErrorProps),
+                ateles_server:destroy(Ctx),
+                erlang:error({Error, Reason});
             {ok, Results} ->
                 Tupled = lists:map(fun
                     (ViewResults) when is_list(ViewResults) ->

@@ -20,7 +20,8 @@
     start_link/0,
 
     acquire/2,
-    release/1
+    release/1,
+    destroy/1
 ]).
 
 
@@ -72,6 +73,10 @@ acquire(CtxId, InitClosure) ->
 
 release({CtxId, _JSCtx}) ->
     gen_server:call(?MODULE, {release, CtxId}).
+
+
+destroy({_CtxId, JSCtx}) ->
+    ateles_util:destroy_ctx(JSCtx).
 
 
 init(_) ->
