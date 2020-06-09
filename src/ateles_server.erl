@@ -68,11 +68,11 @@ start_link() ->
 
 
 acquire(CtxId, InitClosure) ->
-    gen_server:call(?MODULE, {acquire, CtxId, InitClosure}).
+    gen_server:call(?MODULE, {acquire, CtxId, InitClosure}, infinity).
 
 
 release({CtxId, _JSCtx}) ->
-    gen_server:call(?MODULE, {release, CtxId}).
+    gen_server:call(?MODULE, {release, CtxId}, infinity).
 
 
 destroy({_CtxId, JSCtx}) ->
