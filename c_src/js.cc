@@ -395,12 +395,15 @@ js_to_string(JSContext* cx, JS::HandleValue val)
 JSString*
 string_to_js(JSContext* cx, const std::string& s)
 {
-    JSString* ret = JS_NewStringCopyN(cx, s.c_str(), s.size());
-    if(ret != nullptr) {
-        return ret;
+    JS::UTF8Chars utf8(s.c_str(), s.size());
+    JS::UniqueTwoByteChars utf16;
+    size_t len;
+    utf16.reset(JS::UTF8CharsToNewTwoByteCharsZ(cx, utf8, &len).get());
+    if(!utf16) {
+        throw AtelesResourceExhaustedError("Unable to allocate string object.");
     }
-
-    throw AtelesResourceExhaustedError("Unable to allocate string object.");
+    JSString* ret = JS_NewUCStringCopyN(cx, utf16.get(), len);
+    return ret;
 }
 
 std::string

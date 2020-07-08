@@ -29,6 +29,7 @@ map_doc_test_() ->
             fun test_util:stop_couch/1,
             [
                 ?TDEF(map_single_doc),
+                ?TDEF(map_single_doc_in_DBCS),
                 ?TDEF(map_doc_exception),
                 ?TDEF(map_no_funs)
             ]
@@ -38,8 +39,25 @@ map_doc_test_() ->
 
 map_single_doc() ->
     {ok, Ctx} = ateles:acquire_map_context(single_fun_opts()),
-    {ok, Results} = ateles:map_docs(Ctx, [#doc{id = <<"foo">>}]),
-    ?assertEqual([{<<"foo">>, [[{<<"foo">>, null}]]}], Results),
+    {ok, Results} = ateles:map_docs(Ctx, [
+        #doc{id = <<"foo">>, body = {[{<<"value">>, <<"bar">>}]}}]
+    ),
+    ?assertEqual([{<<"foo">>, [[{<<"foo">>, <<"bar">>}]]}], Results),
+    ok = ateles:release_map_context(Ctx).
+
+
+map_single_doc_in_DBCS() ->
+    {ok, Ctx} = ateles:acquire_map_context(single_fun_opts()),
+    {ok, Results} = ateles:map_docs(
+        Ctx, [#doc{id = <<"foo">>,
+            body = {[
+                % 世(E4B896) 界(E7958C)
+                {<<"value">>, <<228,184,150,231,149,140>>}
+            ]}}
+        ]
+    ),
+    ?assertEqual([{<<"foo">>,
+        [[{<<"foo">>, <<228,184,150,231,149,140>>}]]}], Results),
     ok = ateles:release_map_context(Ctx).
 
 
@@ -49,7 +67,7 @@ single_fun_opts() ->
         sig => <<"sig">>,
         lib => {[]},
         map_funs => [
-            <<"function(doc) {emit(doc._id, null);}">>
+            <<"function(doc) {emit(doc._id, doc.value);}">>
         ]
     }.
 
