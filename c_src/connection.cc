@@ -123,7 +123,14 @@ Connection::do_read()
             }
 
             if(_req.method() == http::verb::get && _req.target() == "/Health") {
-                respond(http::status::ok, "OK");
+                if(!_context) {
+                    _context = std::make_shared<JSWorker>(_max_mem);
+                }
+                Message::Ptr mesg = Message::create(self, _req.body());
+
+                auto req = mesg->get_request();
+                req->set_action(JSRequest::HEALTHCHECK);
+                _context->submit(mesg);
                 return;
             }
 

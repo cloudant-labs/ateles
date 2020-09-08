@@ -86,6 +86,9 @@ JSWorker::run_one(JSCx* jscx)
             resp = jscx->call(req->script(), args);
         } else if(req->action() == JSRequest::CALL) {
             resp = jscx->call(req->script(), args);
+        } else if(req->action() == JSRequest::HEALTHCHECK) {
+            std::string script("var x = 'OK'; x;");
+            resp = jscx->eval(script, args);
         }
         ATELES_STAT_JS_SUCCESS++;
         msg->set_response(0, resp);

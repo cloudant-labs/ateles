@@ -22,6 +22,9 @@ message JSRequest {
         REWRITE = 0;
         EVAL = 1;
         CALL = 2;
+        // introduce HEALTHCHECK so that the _health endpoint call
+        // can be treated as internal healthcheck action
+        HEALTHCHECK = 3;
     }
     Action action = 1;
     string script = 2;
