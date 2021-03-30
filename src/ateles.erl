@@ -21,7 +21,10 @@
 -export([
     acquire_map_context/1,
     release_map_context/1,
-    map_docs/2
+    map_docs/2,
+    acquire_context/0,
+    release_context/1,
+    try_compile/4
 ]).
 
 
@@ -84,6 +87,35 @@ map_docs({CtxId, _} = Ctx, Docs) ->
         end
     end, Docs)}.
 
+
+acquire_context() ->
+    CtxId = fabric2_util:uuid(),
+    InitClosure = fun(_Ctx) -> ok end,
+    ateles_server:acquire(CtxId, InitClosure).
+
+
+release_context(Ctx) ->
+    ateles_server:release(Ctx).
+
+try_compile(Ctx, FunType, FunName, RawFunSrc) ->
+    FunSrc = case ateles_util:rewrite(Ctx, RawFunSrc) of
+        {ok, RewriteSrc} -> 
+            RewriteSrc;
+        {error, {_Status, RewriteResult}} ->
+            compilation_error(RewriteResult, FunName, RawFunSrc)
+    end,
+    case ateles_util:eval(Ctx, FunName, FunSrc) of
+        {ok, _} ->
+            ok;
+        {error, {_, EvalResult}} ->
+            compilation_error(EvalResult, FunType, FunName)
+    end.
+
+compilation_error(Result, FunType, FunName) ->
+    Fmt = "Compilation of the ~s function in the '~s' view failed: ~p",
+    Msg = io_lib:format(Fmt, [FunType, FunName, Result]),
+    throw({compilation_error, Msg}).
+     
 
 pmap_docs(Fun, Items) ->
     Parent = self(),
