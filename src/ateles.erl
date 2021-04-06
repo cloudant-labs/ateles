@@ -102,7 +102,9 @@ try_compile(Ctx, FunType, FunName, RawFunSrc) ->
         {ok, RewriteSrc} -> 
             RewriteSrc;
         {error, {_Status, RewriteResult}} ->
-            compilation_error(RewriteResult, FunName, RawFunSrc)
+            compilation_error(RewriteResult, FunName, RawFunSrc);
+        {error, Reason} ->
+            erlang:error(Reason)
     end,
     case ateles_util:eval(Ctx, FunName, FunSrc) of
         {ok, _} ->
