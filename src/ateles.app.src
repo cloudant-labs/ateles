@@ -23,6 +23,7 @@
         stdlib,
         config,
         couch,
+        couch_stats,
         couch_eval,
         gpb
     ]},

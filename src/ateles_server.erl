@@ -237,6 +237,7 @@ acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
                 true ->
                     acquire_int(CtxId, InitClosure, St);
                 false ->
+                    couch_stats:increment_counter([ateles, all_contexts_active_acquire_failure]),
                     {error, all_contexts_active}
             end
     end.
