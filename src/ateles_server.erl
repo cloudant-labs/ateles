@@ -35,6 +35,9 @@
 ]).
 
 
+-include_lib("couch/include/couch_db.hrl").
+
+
 -define(CONTEXTS, ateles_server_contexts).
 -define(CLIENTS, ateles_server_clients).
 -define(LRU, ateles_server_lru).
@@ -226,8 +229,7 @@ acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
                     Fmt = "Failed to initialize ateles context: ~p",
                     couch_log:error(Fmt, [Reason]),
                     Error
-            catch T:R ->
-                S = erlang:get_stacktrace(),
+            catch ?STACKTRACE(T, R, S)
                 Fmt = "Failed to initialize ateles context: ~p",
                 couch_log:error(Fmt, [{T, R, S}]),
                 {error, {T, R, S}}
