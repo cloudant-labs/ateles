@@ -54,7 +54,7 @@ pkg_check_modules(MOZJS REQUIRED mozjs-60)
 pkg_check_modules(PROTOBUF REQUIRED protobuf)
 
 find_program(PROTOC protoc)
-find_program(PYTHON python)
+find_program(PYTHON python3)
 
 option(ENABLE_COVERAGE "Build for code coverage reports" OFF)
 

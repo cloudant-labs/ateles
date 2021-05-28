@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 # Licensed under the Apache License, Version 2.0 (the "License"); you may not
 # use this file except in compliance with the License. You may obtain a copy of
 # the License at
@@ -16,8 +16,8 @@ import sys
 
 def make_bytes(src):
     for line in src:
-        for c in line:
-            yield "0x{:02x}".format(ord(c))
+        for b in line:
+            yield "0x{:02x}".format(b)
 
 
 def mkheader(base_varname, src, tgt):
@@ -43,11 +43,11 @@ def mkheader(base_varname, src, tgt):
 
 def main():
     if len(sys.argv) != 4:
-        print "usage: %s infile outfile base_varname" % sys.argv[0]
+        print("usage: %s infile outfile base_varname" % sys.argv[0])
         exit(1)
 
-    with open(sys.argv[1]) as src:
-        with open(sys.argv[2], "wb") as tgt:
+    with open(sys.argv[1], "rb") as src:
+        with open(sys.argv[2], "w", encoding="ascii") as tgt:
             mkheader(sys.argv[3], src, tgt)
 
 
