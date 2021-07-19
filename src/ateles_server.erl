@@ -229,7 +229,7 @@ acquire_int(CtxId, InitClosure, #{max_contexts := MaxContexts} = St) ->
                     Fmt = "Failed to initialize ateles context: ~p",
                     couch_log:error(Fmt, [Reason]),
                     Error
-            catch ?STACKTRACE(T, R, S)
+            catch T:R:S ->
                 Fmt = "Failed to initialize ateles context: ~p",
                 couch_log:error(Fmt, [{T, R, S}]),
                 {error, {T, R, S}}
