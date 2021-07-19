@@ -170,7 +170,7 @@ run_server(Parent) ->
         ServerPort = erlang:open_port({spawn_executable, Command}, Args),
         Parent ! {self(), ready},
         server_loop(ServerPort)
-    catch ?STACKTRACE(T, R, S)
+    catch T:R:S ->
         io:format(standard_error, "SERVER ERROR: ~p:~p~n~p~n~n", [T, R, S])
     end.
 
