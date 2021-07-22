@@ -14,9 +14,7 @@
 
 
 -include_lib("eunit/include/eunit.hrl").
-
-
--define(TDEF(A), {atom_to_list(A), fun A/0}).
+-include_lib("fabric/test/fabric2_test.hrl").
 
 
 timeout_test_() ->
@@ -26,16 +24,16 @@ timeout_test_() ->
             setup,
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
-            [
-                {timeout, 10, ?TDEF(timeout_eval_default)},
+            with([
+                ?TDEF(timeout_eval_default, 10),
                 ?TDEF(timeout_eval_control),
                 ?TDEF(timeout_call)
-            ]
+            ])
         }
     }.
 
 
-timeout_eval_default() ->
+timeout_eval_default(_) ->
     {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"(function() {while(1) {continue;}})();">>,
     Result = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script, 0),
@@ -43,7 +41,7 @@ timeout_eval_default() ->
     ok = ateles_util:destroy_ctx(Ctx).
 
 
-timeout_eval_control() ->
+timeout_eval_control(_) ->
     {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"(function() {while(1) {continue;}})();">>,
     Result = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script, 250),
@@ -51,7 +49,7 @@ timeout_eval_control() ->
     ok = ateles_util:destroy_ctx(Ctx).
 
 
-timeout_call() ->
+timeout_call(_) ->
     {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"function wait() {var a = 1; while(true) {a += 1;}};">>,
     {ok, _} = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script, 0),

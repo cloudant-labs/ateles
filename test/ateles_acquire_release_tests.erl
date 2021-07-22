@@ -14,9 +14,7 @@
 
 
 -include_lib("eunit/include/eunit.hrl").
-
-
--define(TDEF(A), {atom_to_list(A), fun A/0}).
+-include_lib("fabric/test/fabric2_test.hrl").
 
 
 -define(CONTEXTS, ateles_server_contextss).
@@ -34,24 +32,24 @@ acquire_release_test_() ->
             setup,
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
-            [
+            with([
                 ?TDEF(acquire_release),
                 ?TDEF(acquire_multiple),
                 ?TDEF(acquire_error),
                 ?TDEF(acquire_exception)
-            ]
+            ])
         }
     }.
 
 
-acquire_release() ->
+acquire_release(_) ->
     {ok, Ctx} = ateles_server:acquire(?CTX_ID, ?INIT_CLOSURE),
     ?assertEqual(1, length(ets:lookup(?CLIENTS, self()))),
     ok = ateles_server:release(Ctx),
     ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
 
 
-acquire_multiple() ->
+acquire_multiple(_) ->
     {ok, Ctx1} = ateles_server:acquire(?CTX_ID, ?INIT_CLOSURE),
     {ok, Ctx2} = ateles_server:acquire(?CTX_ID, ?INIT_CLOSURE),
 
@@ -65,7 +63,7 @@ acquire_multiple() ->
     ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
 
 
-acquire_error() ->
+acquire_error(_) ->
     Init = fun(_) -> {error, on_purpose} end,
     ?assertEqual(
             {error, on_purpose},
@@ -74,7 +72,7 @@ acquire_error() ->
     ?assertEqual(0, length(ets:lookup(?CLIENTS, self()))).
 
 
-acquire_exception() ->
+acquire_exception(_) ->
     Init = fun(_) -> erlang:throw(on_purpose) end,
     ?assertMatch(
             {error, {throw, on_purpose, _}},

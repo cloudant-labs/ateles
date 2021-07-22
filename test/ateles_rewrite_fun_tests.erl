@@ -14,9 +14,7 @@
 
 
 -include_lib("eunit/include/eunit.hrl").
-
-
--define(TDEF(A), {atom_to_list(A), fun A/0}).
+-include_lib("fabric/test/fabric2_test.hrl").
 
 
 rewrite_test_() ->
@@ -26,23 +24,23 @@ rewrite_test_() ->
             setup,
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
-            [
+            with([
                 ?TDEF(rewrite_simple),
                 ?TDEF(rewrite_all),
                 ?TDEF(rewrite_valid)
-            ]
+            ])
         }
     }.
 
 
-rewrite_simple() ->
+rewrite_simple(_) ->
     Function = <<"function(doc) {emit(null, null);}">>,
     Expect = <<"(function (doc) {\n    emit(null, null);\n});">>,
     {ok, Result} = do_rewrite(Function),
     ?assertEqual(Expect, Result).
 
 
-rewrite_all() ->
+rewrite_all(_) ->
     Functions = [
         <<"function(doc){ emit(null, null);}">>,
         <<"function(bar){return;}">>
@@ -55,7 +53,7 @@ rewrite_all() ->
     ?assertEqual(Expect, Result).
 
 
-rewrite_valid() ->
+rewrite_valid(_) ->
     Function = <<"(function (doc) {\n    emit(null, null);\n});">>,
     {ok, Result} = do_rewrite(Function),
     ?assertEqual(Function, Result).

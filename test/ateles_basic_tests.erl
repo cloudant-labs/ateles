@@ -14,9 +14,7 @@
 
 
 -include_lib("eunit/include/eunit.hrl").
-
-
--define(TDEF(A), {atom_to_list(A), fun A/0}).
+-include_lib("fabric/test/fabric2_test.hrl").
 
 
 basic_test_() ->
@@ -26,22 +24,22 @@ basic_test_() ->
             setup,
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
-            [
+            with([
                 ?TDEF(eval_code),
                 ?TDEF(call_function)
-            ]
+            ])
         }
     }.
 
 
-eval_code() ->
+eval_code(_) ->
     {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"var x = 2; x;">>,
     {ok, 2} = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script),
     ok = ateles_util:destroy_ctx(Ctx).
 
 
-call_function() ->
+call_function(_) ->
     {ok, Ctx} = ateles_util:create_ctx(),
     Script = <<"function double(x) {return x * 2;};">>,
     {ok, _} = ateles_util:eval({test_ctx, Ctx}, <<"foo.js">>, Script),
