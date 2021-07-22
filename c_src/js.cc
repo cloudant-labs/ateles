@@ -20,6 +20,7 @@
 #include "esprima.h"
 #include "js/Conversions.h"
 #include "rewrite_fun.h"
+#include "validate.h"
 #include "stats.h"
 
 #define ACTIVE_SLEEP_TIME_MSEC 100   // 100ms = 0.1s
@@ -129,6 +130,10 @@ JSCx::JSCx(size_t max_mem, bool rewriter) :
     if(!JS_DefineFunction(this->_cx, global_obj, "print", print_fun, 1, 0)) {
         throw AtelesInternalError("Error installing print function.");
     }
+
+    auto validate_src = std::string((const char*) validate_data, validate_len);
+    auto args = std::vector<std::string>{"file=validate.js"};
+    this->eval(validate_src, args);
 
     if(rewriter) {
         std::string src((const char*) escodegen_data, escodegen_len);

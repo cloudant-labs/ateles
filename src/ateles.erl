@@ -24,7 +24,8 @@
     map_docs/2,
     acquire_context/0,
     release_context/1,
-    try_compile/4
+    try_compile/4,
+    validate_doc_update/5
 ]).
 
 
@@ -117,7 +118,44 @@ compilation_error(Result, FunType, FunName) ->
     Fmt = "Compilation of the ~s function in the '~s' view failed: ~p",
     Msg = io_lib:format(Fmt, [FunType, FunName, Result]),
     throw({compilation_error, Msg}).
-     
+
+validate_doc_update(DDoc, EditDoc, DiskDoc, UserCtx, SecObj) ->
+    JsonEditDoc = couch_doc:to_json_obj(EditDoc, [revs]),
+    JsonDDoc = couch_doc:to_json_obj(DDoc, []),
+    JsonDiskDoc = couch_query_servers:json_doc(DiskDoc),
+    ddoc_prompt(JsonDDoc, <<"validate_doc_update">>, [JsonEditDoc, JsonDiskDoc, UserCtx, SecObj]).
+
+ddoc_prompt({Props} = DDoc, FunName, Args) ->
+    {ok, Ctx} = acquire_context(),
+    RawFun = couch_util:get_value(FunName, Props),
+    {ok, Fun} = ateles_util:rewrite(Ctx, RawFun),
+    try
+        case ateles_util:call(Ctx, <<"validate">>, [Fun, DDoc, Args]) of
+            {ok, true} ->
+                ok;
+            {ok, {ErrorProps}} when is_list(ErrorProps) ->
+                case ErrorProps of
+                    [{<<"forbidden">>, Message}] ->
+                        throw({forbidden, Message});
+                    [{<<"unauthorized">>, Message}] ->
+                        throw({unauthorized, Message});
+                    [{<<"compilation_error">>, Message}] ->
+                        throw({compilation_error, Message});
+                    [{_, Message}] ->
+                        throw({unknown_error, Message});
+                    Message when is_binary(Message) ->
+                        throw({unknown_error, Message})
+                end;
+            {ok, Unknown} ->
+                Fmt = "prompt doc unknown response- ~p",
+                couch_log:info(Fmt, [Unknown]),
+                throw({unknown_error, <<"unknown error">>});
+            {error, Reason} ->
+                erlang:error(Reason)
+        end
+    after
+        release_context(Ctx)
+    end.
 
 pmap_docs(Fun, Items) ->
     Parent = self(),
