@@ -15,9 +15,7 @@
 
 -include_lib("couch/include/couch_db.hrl").
 -include_lib("eunit/include/eunit.hrl").
-
-
--define(TDEF(A), {atom_to_list(A), fun A/0}).
+-include_lib("fabric/test/fabric2_test.hrl").
 
 
 map_doc_test_() ->
@@ -27,17 +25,17 @@ map_doc_test_() ->
             setup,
             fun() -> test_util:start_couch([ateles]) end,
             fun test_util:stop_couch/1,
-            [
+            with([
                 ?TDEF(map_single_doc),
                 ?TDEF(map_single_doc_in_DBCS),
                 ?TDEF(map_doc_exception),
                 ?TDEF(map_no_funs)
-            ]
+            ])
         }
     }.
 
 
-map_single_doc() ->
+map_single_doc(_) ->
     {ok, Ctx} = ateles:acquire_map_context(single_fun_opts()),
     {ok, Results} = ateles:map_docs(Ctx, [
         #doc{id = <<"foo">>, body = {[{<<"value">>, <<"bar">>}]}}]
@@ -46,7 +44,7 @@ map_single_doc() ->
     ok = ateles:release_map_context(Ctx).
 
 
-map_single_doc_in_DBCS() ->
+map_single_doc_in_DBCS(_) ->
     {ok, Ctx} = ateles:acquire_map_context(single_fun_opts()),
     {ok, Results} = ateles:map_docs(
         Ctx, [#doc{id = <<"foo">>,
@@ -72,7 +70,7 @@ single_fun_opts() ->
     }.
 
 
-map_doc_exception() ->
+map_doc_exception(_) ->
     {ok, Ctx} = ateles:acquire_map_context(exception_opts()),
     {ok, Results} = ateles:map_docs(Ctx, [#doc{id = <<"foo">>}]),
     ?assertEqual([{<<"foo">>, [[]]}], Results),
@@ -90,7 +88,7 @@ exception_opts() ->
     }.
 
 
-map_no_funs() ->
+map_no_funs(_) ->
     {ok, Ctx} = ateles:acquire_map_context(no_funs_opts()),
     ?assertError(
             {map_docs, {{<<"missing_map_functions">>, _}, _}},
