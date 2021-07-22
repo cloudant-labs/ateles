@@ -10,7 +10,7 @@
 # License for the specific language governing permissions and limitations under
 # the License.
 
-.PHONY: all format init build test coverage clean
+.PHONY: all format init build test coverage clean dev-run
 
 all: server
 	@rebar compile
@@ -34,6 +34,8 @@ server: init
 	@mkdir -p priv/
 	@cp _build/ateles priv/ateles
 
+dev-run: server
+	_build/ateles -p 8444
 
 eunit: export ERL_AFLAGS = -config $(shell pwd)/test/eunit.config
 eunit:

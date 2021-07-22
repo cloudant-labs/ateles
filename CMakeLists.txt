@@ -86,6 +86,8 @@ set(ESPRIMA_SRC ${CMAKE_CURRENT_SOURCE_DIR}/priv/esprima.js)
 set(ESPRIMA_HDR ${CMAKE_CURRENT_BINARY_DIR}/esprima.h)
 set(REWRITE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/priv/rewrite_fun.js)
 set(REWRITE_HDR ${CMAKE_CURRENT_BINARY_DIR}/rewrite_fun.h)
+set(VALIDATE_SRC ${CMAKE_CURRENT_SOURCE_DIR}/priv/validate.js)
+set(VALIDATE_HDR ${CMAKE_CURRENT_BINARY_DIR}/validate.h)
 
 
 add_custom_command(
@@ -106,6 +108,12 @@ add_custom_command(
     DEPENDS ${REWRITE_SRC}
 )
 
+add_custom_command(
+        OUTPUT ${VALIDATE_HDR}
+        COMMAND ${PYTHON} ${MKHEADER} ${VALIDATE_SRC} ${VALIDATE_HDR} validate
+        DEPENDS ${VALIDATE_SRC}
+)
+
 
 file(GLOB SRC "c_src/*.cc")
 add_executable(
@@ -114,7 +122,8 @@ add_executable(
     ${SRC}
     ${ESCODEGEN_HDR}
     ${ESPRIMA_HDR}
-    ${REWRITE_HDR})
+    ${REWRITE_HDR}
+    ${VALIDATE_HDR})
 
 set(CFLAGS
     -g
