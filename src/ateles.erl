@@ -25,7 +25,9 @@
     acquire_context/0,
     release_context/1,
     try_compile/4,
-    validate_doc_update/5
+    validate_doc_update/5,
+    filter_view/3,
+    filter_docs/5
 ]).
 
 
@@ -123,14 +125,35 @@ validate_doc_update(DDoc, EditDoc, DiskDoc, UserCtx, SecObj) ->
     JsonEditDoc = couch_doc:to_json_obj(EditDoc, [revs]),
     JsonDDoc = couch_doc:to_json_obj(DDoc, []),
     JsonDiskDoc = couch_query_servers:json_doc(DiskDoc),
-    ddoc_prompt(JsonDDoc, <<"validate_doc_update">>, [JsonEditDoc, JsonDiskDoc, UserCtx, SecObj]).
+    ddoc_prompt(JsonDDoc, <<"validate">>, [<<"validate_doc_update">>], [JsonEditDoc, JsonDiskDoc, UserCtx, SecObj]).
 
-ddoc_prompt({Props} = DDoc, FunName, Args) ->
+filter_view(DDoc, VName, Docs) ->
+    JsonDocs = [couch_query_servers:json_doc(Doc) || Doc <- Docs],
+    JsonDDoc = couch_doc:to_json_obj(DDoc, []),
+    [true, Passes] = ddoc_prompt(JsonDDoc, <<"filter_view">>, [<<"views">>, VName, <<"map">>], JsonDocs),
+    {ok, Passes}.
+
+filter_docs(Req, Db, DDoc, FName, Docs) ->
+    JsonReq =
+        case Req of
+            {json_req, JsonObj} ->
+                JsonObj;
+            #httpd{} = HttpReq ->
+                couch_httpd_external:json_req_obj(HttpReq, Db)
+        end,
+    JsonDocs = [couch_query_servers:json_doc(Doc) || Doc <- Docs],
+    JsonDDoc = couch_doc:to_json_obj(DDoc, []),
+    [true, Passes] = ddoc_prompt(JsonDDoc, <<"filter_docs">>, [<<"filters">>, FName], [JsonReq, JsonDocs]),
+    {ok, Passes}.
+
+ddoc_prompt(DDoc, JSFun, FunName, Args) when is_list(FunName) /= true ->
+    ddoc_prompt(DDoc, JSFun, [FunName], Args);
+ddoc_prompt(DDoc, JSFun, FunName, Args) ->
     {ok, Ctx} = acquire_context(),
-    RawFun = couch_util:get_value(FunName, Props),
+    RawFun = couch_util:get_nested_json_value(DDoc, FunName),
     {ok, Fun} = ateles_util:rewrite(Ctx, RawFun),
     try
-        case ateles_util:call(Ctx, <<"validate">>, [Fun, DDoc, Args]) of
+        case ateles_util:call(Ctx, JSFun, [Fun, DDoc, Args]) of
             {ok, true} ->
                 ok;
             {ok, {ErrorProps}} when is_list(ErrorProps) ->
@@ -146,6 +169,8 @@ ddoc_prompt({Props} = DDoc, FunName, Args) ->
                     Message when is_binary(Message) ->
                         throw({unknown_error, Message})
                 end;
+            {ok, [true, Passes]} ->
+                [true, Passes];
             {ok, Unknown} ->
                 Fmt = "prompt doc unknown response- ~p",
                 couch_log:info(Fmt, [Unknown]),
