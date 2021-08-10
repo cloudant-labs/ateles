@@ -128,7 +128,8 @@ validate_doc_update(DDoc, EditDoc, DiskDoc, UserCtx, SecObj) ->
     ddoc_prompt(JsonDDoc, <<"validate">>, [<<"validate_doc_update">>], [JsonEditDoc, JsonDiskDoc, UserCtx, SecObj]).
 
 filter_view(DDoc, VName, Docs) ->
-    JsonDocs = [couch_query_servers:json_doc(Doc) || Doc <- Docs],
+    Options = couch_query_servers:json_doc_options(),
+    JsonDocs = [couch_query_servers:json_doc(Doc, Options) || Doc <- Docs],
     JsonDDoc = couch_doc:to_json_obj(DDoc, []),
     [true, Passes] = ddoc_prompt(JsonDDoc, <<"filter_view">>, [<<"views">>, VName, <<"map">>], JsonDocs),
     {ok, Passes}.
@@ -141,7 +142,8 @@ filter_docs(Req, Db, DDoc, FName, Docs) ->
             #httpd{} = HttpReq ->
                 couch_httpd_external:json_req_obj(HttpReq, Db)
         end,
-    JsonDocs = [couch_query_servers:json_doc(Doc) || Doc <- Docs],
+    Options = couch_query_servers:json_doc_options(),
+    JsonDocs = [couch_query_servers:json_doc(Doc, Options) || Doc <- Docs],
     JsonDDoc = couch_doc:to_json_obj(DDoc, []),
     [true, Passes] = ddoc_prompt(JsonDDoc, <<"filter_docs">>, [<<"filters">>, FName], [JsonReq, JsonDocs]),
     {ok, Passes}.
