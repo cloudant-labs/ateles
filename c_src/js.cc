@@ -20,7 +20,7 @@
 #include "esprima.h"
 #include "js/Conversions.h"
 #include "rewrite_fun.h"
-#include "validate.h"
+#include "ddoc.h"
 #include "stats.h"
 
 #define ACTIVE_SLEEP_TIME_MSEC 100   // 100ms = 0.1s
