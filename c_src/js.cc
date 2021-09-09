@@ -209,7 +209,7 @@ JSCx::eval(const std::string& script, std::vector<std::string>& args)
     //       map.js is being loaded multiple times.
     if(file == "map.js") {
         _num_evals++;
-        fprintf(stderr, "xkcd: map.js loaded %d times: %p\n", _num_evals, this);
+        // fprintf(stderr, "xkcd: map.js loaded %d times: %p\n", _num_evals, this);
     }
 
     JS::RootedValue rval(this->_cx);
