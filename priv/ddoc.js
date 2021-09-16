@@ -9,7 +9,7 @@ const jsonizeParams = (funStr, ddocStr, argsStr) => {
     return [ddoc, fun, args];
 }
 
-function validate(funStr, ddocStr, argsStr) {
+function validate_doc_update(funStr, ddocStr, argsStr) {
     try {
         const [ddoc, fun, args] = jsonizeParams(funStr, ddocStr, argsStr);
         fun.apply(ddoc, args);

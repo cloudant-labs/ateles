@@ -125,7 +125,7 @@ validate_doc_update(DDoc, EditDoc, DiskDoc, UserCtx, SecObj) ->
     JsonEditDoc = couch_doc:to_json_obj(EditDoc, [revs]),
     JsonDDoc = couch_doc:to_json_obj(DDoc, []),
     JsonDiskDoc = couch_query_servers:json_doc(DiskDoc),
-    ddoc_prompt(JsonDDoc, <<"validate">>, [<<"validate_doc_update">>], [JsonEditDoc, JsonDiskDoc, UserCtx, SecObj]).
+    ddoc_prompt(JsonDDoc, <<"validate_doc_update">>, [<<"validate_doc_update">>], [JsonEditDoc, JsonDiskDoc, UserCtx, SecObj]).
 
 filter_view(DDoc, VName, Docs) ->
     Options = couch_query_servers:json_doc_options(),
